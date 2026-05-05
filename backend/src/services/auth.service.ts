@@ -1,0 +1,85 @@
+import pool from '../config/database';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { Role, JwtPayload } from '../types';
+
+// UID regex: e.g. 2021-CE-A-01-2025
+const UID_REGEX = /^\d{4}-[A-Z]{2,3}-[A-Z]-\d{2}-\d{4}$/;
+
+export async function loginFaculty(email: string, password: string) {
+  const [rows] = await pool.query<any[]>(
+    'SELECT * FROM faculty WHERE email_id = ?',
+    [email]
+  );
+  if (!rows.length) return null;
+
+  const faculty = rows[0];
+  const valid = await bcrypt.compare(password, faculty.password_hash);
+  if (!valid) return null;
+
+  // Map designation_role to JWT role
+  let role: Role;
+  if (faculty.is_admin) {
+    role = 'Admin';
+  } else if (faculty.is_hod) {
+    role = 'HOD';
+  } else {
+    // designation_role can be 'Class Incharge', 'Subject Incharge', 'TG'
+    switch (faculty.designation_role) {
+      case 'Class Incharge': role = 'ClassIncharge'; break;
+      case 'Subject Incharge': role = 'SubjectIncharge'; break;
+      case 'TG': role = 'TG'; break;
+      default: role = 'SubjectIncharge';
+    }
+  }
+
+  const payload: JwtPayload = { id: faculty.faculty_id, role, email: faculty.email_id };
+  const token = jwt.sign(payload, process.env.JWT_SECRET as string, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+  } as jwt.SignOptions);
+
+  return { token, faculty: { id: faculty.faculty_id, name: faculty.name, email: faculty.email_id, role } };
+}
+
+export async function loginStudent(email: string, password: string) {
+  // Students log in by institutional email
+  const [rows] = await pool.query<any[]>(
+    'SELECT * FROM student WHERE email_id = ?',
+    [email]
+  );
+  if (!rows.length) return null;
+
+  const student = rows[0];
+  const valid = await bcrypt.compare(password, student.password_hash);
+  if (!valid) return null;
+
+  const payload: JwtPayload = { id: student.uid, role: 'Student', email: student.email_id };
+  const token = jwt.sign(payload, process.env.JWT_SECRET as string, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+  } as jwt.SignOptions);
+
+  return {
+    token,
+    student: { uid: student.uid, email: student.email_id, semester: student.current_semester, role: 'Student' },
+  };
+}
+
+export async function changePassword(
+  id: number | string,
+  role: Role,
+  oldPassword: string,
+  newPassword: string
+): Promise<boolean> {
+  const table = role === 'Student' ? 'student' : 'faculty';
+  const idCol = role === 'Student' ? 'uid' : 'faculty_id';
+
+  const [rows] = await pool.query<any[]>(`SELECT password_hash FROM ${table} WHERE ${idCol} = ?`, [id]);
+  if (!rows.length) return false;
+
+  const valid = await bcrypt.compare(oldPassword, rows[0].password_hash);
+  if (!valid) return false;
+
+  const hash = await bcrypt.hash(newPassword, 12);
+  await pool.query(`UPDATE ${table} SET password_hash = ? WHERE ${idCol} = ?`, [hash, id]);
+  return true;
+}
