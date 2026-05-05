@@ -1,8 +1,8 @@
-# StratosERP Frontend Mockup
+# StratosERP Production UI
 
-This frontend is a role-based test harness for StratosERP Phase-I modules.
+This frontend is the production-style role portal for StratosERP Phase-I modules.
 
-It includes dedicated sandbox decks for:
+It includes dedicated role portals for:
 
 - Admin
 - HOD
@@ -12,12 +12,12 @@ It includes dedicated sandbox decks for:
 - Teacher Guardian
 - Student
 
-Each deck provides:
+Each portal provides:
 
-- Workflow summary and KPI mock cards
-- Request action cards mapped to backend endpoints
-- Editable JSON payloads for POST/PUT calls
-- Live response inspector with HTTP status and duration
+- Workflow priorities and module health dashboards
+- Operational endpoint execution cards mapped to backend APIs
+- Editable JSON payloads for POST/PUT operations
+- Activity timeline and response inspection surfaces
 
 ## Stack
 
@@ -51,9 +51,9 @@ http://localhost:3000
 
 ## How to Test Endpoints
 
-1. Use the "Auth Boot Console" on the home page.
+1. Use the "Access Control Console" on the home page.
 2. Login as faculty or student to obtain and store JWT.
-3. Open any role deck and run action cards.
+3. Open any role portal and run operation cards.
 4. Edit JSON payloads and rerun to test edge scenarios.
 
 ## API Notes

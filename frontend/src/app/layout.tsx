@@ -13,8 +13,8 @@ const chivoMono = Chivo_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "StratosERP Frontend Mockup",
-  description: "Role-based testing deck built with Next.js and Tailwind CSS.",
+  title: "StratosERP Production Portal",
+  description: "Role-based production UI for StratosERP Phase-I modules.",
 };
 
 export default function RootLayout({

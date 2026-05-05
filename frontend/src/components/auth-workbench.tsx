@@ -92,11 +92,11 @@ export default function AuthWorkbench() {
     <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
       <article className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-2xl font-semibold text-zinc-900">Auth Boot Console</h2>
-          <p className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-zinc-100">Proxy-Driven</p>
+          <h2 className="text-2xl font-semibold text-zinc-900">Access Control Console</h2>
+          <p className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-semibold text-zinc-100">Production Gateway</p>
         </div>
         <p className="mt-2 text-sm text-zinc-600">
-          Authenticate once, store the JWT in local storage, and stress-test each module from a shared role sandbox.
+          Authenticate once, store the JWT in local storage, and execute secured operations from each role portal.
         </p>
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -162,14 +162,14 @@ export default function AuthWorkbench() {
       </article>
 
       <article className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
-        <h3 className="text-xl font-semibold text-zinc-900">Role Test Decks</h3>
-        <p className="mt-2 text-sm text-zinc-600">Open any role deck to run endpoint actions and inspect live response payloads.</p>
+        <h3 className="text-xl font-semibold text-zinc-900">Role Portals</h3>
+        <p className="mt-2 text-sm text-zinc-600">Open any production portal to manage operations, analytics, and activity flows.</p>
 
         <ul className="mt-4 space-y-3">
           {roleBlueprints.map((role) => (
             <li key={role.slug}>
               <Link
-                href={`/mock/${role.slug}`}
+                href={`/portal/${role.slug}`}
                 className="block rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 transition hover:border-zinc-400 hover:bg-white"
               >
                 <p className="text-sm font-semibold text-zinc-900">{role.roleName}</p>
