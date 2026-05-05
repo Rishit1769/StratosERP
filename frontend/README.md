@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# StratosERP Frontend Mockup
 
-## Getting Started
+This frontend is a role-based test harness for StratosERP Phase-I modules.
 
-First, run the development server:
+It includes dedicated sandbox decks for:
+
+- Admin
+- HOD
+- Class Incharge
+- Subject Incharge
+- Practical Teacher
+- Teacher Guardian
+- Student
+
+Each deck provides:
+
+- Workflow summary and KPI mock cards
+- Request action cards mapped to backend endpoints
+- Editable JSON payloads for POST/PUT calls
+- Live response inspector with HTTP status and duration
+
+## Stack
+
+- Next.js 15 (App Router)
+- TypeScript
+- Tailwind CSS
+
+## Quick Start
+
+1. Install dependencies:
+
+```bash
+npm install
+```
+
+2. Set API base URL (optional):
+
+```bash
+copy .env.example .env.local
+```
+
+3. Run dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+4. Open the app:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+http://localhost:3000
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How to Test Endpoints
 
-## Learn More
+1. Use the "Auth Boot Console" on the home page.
+2. Login as faculty or student to obtain and store JWT.
+3. Open any role deck and run action cards.
+4. Edit JSON payloads and rerun to test edge scenarios.
 
-To learn more about Next.js, take a look at the following resources:
+## API Notes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Frontend requests go through `src/app/api/proxy/route.ts` to avoid browser CORS issues during local testing.
+- JWT and API base URL are stored in browser local storage keys:
+	- `stratos.jwtToken`
+	- `stratos.apiBaseUrl`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Build
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run build
+```
