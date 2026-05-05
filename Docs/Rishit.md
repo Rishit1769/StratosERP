@@ -1,13 +1,270 @@
-# StratosERP — Database Engineering Progress Log
+# StratosERP — Backend Engineering Progress Log
 
 **Engineer:** Rishit Singh  
-**Last Updated:** 2026-05-03  
+**Last Updated:** 2026-05-24  
 **Engine:** MySQL 8.0+ · Charset: `utf8mb4` / `utf8mb4_unicode_ci`  
-**Schema File:** `Database/schema.sql`
+**Schema File:** `Database/schema.sql`  
+**Backend:** Node.js + Express + TypeScript — `backend/`  
+**Repository:** https://github.com/Rishit1769/StratosERP (branch: `main`)
 
 ---
 
-## Phase 1 — Core Schema (Completed)
+## Phase 1 — Backend Implementation (Completed ✅)
+
+### Architecture Summary
+
+```
+backend/
+  src/
+    app.ts                     # Express entry point — registers all routes
+    config/
+      database.ts              # MySQL2 connection pool
+      minio.ts                 # MinIO client + bucket bootstrap
+      gemini.ts                # Google Generative AI client
+    middleware/
+      auth.ts                  # JWT Bearer token authentication
+      rbac.ts                  # Role-based access control factory
+    types/
+      index.ts                 # Shared TypeScript types (Role, JwtPayload, etc.)
+    routes/
+      auth.routes.ts           # /api/auth/*
+      admin.routes.ts          # /api/admin/*
+      hod.routes.ts            # /api/hod/*
+      classIncharge.routes.ts  # /api/class-incharge/*
+      subjectIncharge.routes.ts# /api/subject-incharge/*
+      practicalTeacher.routes.ts# /api/practical-teacher/*
+      teacherGuardian.routes.ts# /api/teacher-guardian/*
+      student.routes.ts        # /api/student/*
+    controllers/               # Thin HTTP layer — input validation + response
+    services/                  # Business logic + SQL queries
+    services/minio.service.ts  # File upload/download with MinIO
+    services/gemini.service.ts # AI-powered grievance routing, notice gen, analysis
+  .env                         # Local credentials (NOT in git)
+  .env.example                 # Template for environment setup
+```
+
+### Technology Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Runtime | Node.js v24 |
+| Framework | Express.js |
+| Language | TypeScript 5 |
+| Database | MySQL 8.0 (mysql2) |
+| Auth | JWT (jsonwebtoken + bcryptjs) |
+| File Storage | MinIO S3-compatible |
+| AI | Google Gemini 2.5-flash-lite |
+| CSV Parsing | csv-parse/sync |
+| File Upload | multer (memory storage) |
+
+### How To Run
+
+```bash
+cd backend
+cp .env.example .env          # Fill in your credentials
+npm install
+npm run dev                   # ts-node-dev (hot reload) on port 5000
+npm run build                 # Compile to dist/
+npm start                     # Run compiled dist/app.js
+```
+
+### Environment Variables (.env)
+
+```
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=<your_password>
+DB_NAME=StratosERP
+MINIO_ENDPOINT=<host>
+MINIO_PORT=9000
+MINIO_USE_SSL=false
+MINIO_ACCESS_KEY=<key>
+MINIO_SECRET_KEY=<secret>
+GEMINI_API_KEY=<google_ai_key>
+GEMINI_MODEL=gemini-2.5-flash-lite
+JWT_SECRET=<random_256_bit_hex>
+JWT_EXPIRES_IN=24h
+PORT=5000
+```
+
+---
+
+### API Endpoints Reference
+
+#### Auth  `/api/auth`
+| Method | Path | Access | Description |
+|--------|------|--------|-------------|
+| POST | `/login/faculty` | Public | Faculty login → JWT |
+| POST | `/login/student` | Public | Student login → JWT |
+| POST | `/change-password` | Authenticated | Change own password |
+| GET | `/me` | Authenticated | Get current user profile |
+
+#### Admin  `/api/admin`
+| Method | Path | Description |
+|--------|------|-------------|
+| GET/POST | `/config` | Get/set global config (semester type, dates) |
+| POST | `/ingest/students` | Bulk CSV student upload |
+| POST | `/ingest/faculty` | Bulk CSV faculty upload |
+| POST | `/ingest/subjects` | Bulk CSV subject upload |
+| POST | `/ingest/timetable` | Bulk CSV timetable upload |
+| POST | `/batch-progression` | Trigger semester progression |
+| POST | `/exam-seating` | Generate exam seating matrix |
+| POST | `/invigilation-matrix` | Generate invigilation duty roster |
+| GET | `/analytics` | Macro-level institute analytics |
+| GET/POST | `/faculty` | List/create faculty |
+| GET | `/students` | List all students (paginated) |
+| GET | `/alumni` | List alumni records |
+| GET/POST | `/notices` | List/create notices |
+| POST | `/notices/ai` | AI-generated institutional notice |
+
+#### HOD  `/api/hod`
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/faculty` | List department faculty |
+| POST | `/faculty/assign-subject` | Assign subject to faculty |
+| POST | `/faculty/assign-role` | Change faculty designation |
+| GET | `/analytics` | Branch-level analytics |
+| GET | `/students/:uid` | Track individual student |
+| GET | `/alumni` | Branch alumni |
+| GET | `/grievances/escalated` | Escalated grievances |
+| PUT | `/grievances/:ticket_id/resolve` | Resolve grievance |
+| GET/POST | `/leave` | View/schedule leave substitution |
+| GET/POST | `/notices` | Branch notices |
+| POST | `/notices/ai` | AI-generated branch notice |
+| GET | `/subjects` | Subjects list |
+
+#### Class Incharge  `/api/class-incharge`
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/analytics` | Class-level marks analytics |
+| GET | `/students` | All students with backlog count |
+| GET | `/students/at-risk` | Students with KT/SUPPLI or marks < 40 |
+| GET | `/students/:uid/portfolio` | Full PTM portfolio for student |
+| GET | `/students/:uid/ptm-report` | AI-generated PTM report |
+| GET | `/progression-readiness` | Students clear for promotion |
+| GET/POST | `/notices` | Class notices |
+
+#### Subject Incharge  `/api/subject-incharge`
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/subjects` | Faculty's assigned subjects |
+| POST | `/marks` | Upsert student marks |
+| POST | `/marks/suppli` | Upsert supplementary marks |
+| GET | `/marks/:subject_id` | View subject marks |
+| GET | `/analytics/:subject_id` | Subject performance analytics |
+| GET | `/slot/active` | Current active timetable slot |
+| POST | `/attendance` | Mark attendance for active slot |
+| GET | `/attendance/:slot_id` | Get attendance for slot+date |
+| POST | `/lecture-log` | Log lecture topics |
+| GET | `/lecture-logs/:subject_id` | Get lecture history |
+| POST | `/materials` | Upload study material to MinIO |
+| POST | `/syllabus-analysis` | AI pacing analysis |
+
+#### Practical Teacher  `/api/practical-teacher`
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/subjects` | Lab subjects |
+| POST | `/batches` | Create lab batch |
+| GET | `/batches/:subject_id` | List batches |
+| POST | `/experiments` | Create experiment |
+| GET | `/experiments/:subject_id` | List experiments |
+| POST | `/sessions` | Create lab session |
+| POST | `/sessions/:session_id/complete` | Mark session completed |
+| POST | `/sessions/:session_id/lock` | Lock session (permanent) |
+| POST | `/sessions/:session_id/attendance` | Mark lab attendance |
+| POST | `/sessions/:session_id/marks` | Upsert lab marks |
+| POST | `/submissions` | Upload lab submission |
+
+#### Teacher Guardian  `/api/teacher-guardian`
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/mentees` | List assigned mentees |
+| GET | `/mentees/:uid` | Mentee full portfolio |
+| POST | `/mentees/:uid/aicte-points` | Award AICTE points |
+| GET | `/mentees/:uid/aicte-points` | View AICTE points |
+| GET | `/mentees/:uid/improvement-report` | AI areas-of-improvement |
+| GET | `/grievances` | Assigned open grievances |
+| PUT | `/grievances/:ticket_id/resolve` | Resolve grievance |
+| GET | `/notices` | Relevant notices |
+
+#### Student  `/api/student`
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/dashboard` | Full academic dashboard |
+| GET | `/timetable` | Personal timetable |
+| GET | `/faculty-locator` | Live faculty location (by current time) |
+| POST | `/grievances` | Submit grievance (AI-routed) |
+| GET | `/grievances` | My grievance history |
+| GET | `/notices` | All notices |
+| GET | `/materials/:subject_id` | Study material listing info |
+| GET | `/materials/download` | Download material (MinIO presigned URL) |
+| GET | `/lab-marks` | Personal lab marks |
+
+---
+
+## Testing Results — Phase 1 (All Endpoints Verified ✅)
+
+### Test Environment
+
+- **DB**: MySQL 8.0.45 @ localhost:3306/StratosERP
+- **MinIO**: 100.106.25.126:9000 (buckets: study-materials, notices, submissions)
+- **Gemini**: gemini-2.5-flash-lite
+- **Server**: http://localhost:5000
+
+### Bugs Found & Fixed
+
+| # | Bug | Root Cause | Fix |
+|---|-----|-----------|-----|
+| 1 | `jwt.sign()` throws "secretOrPrivateKey must have a value" | `JWT_SECRET` was empty in `.env` | Generated 256-bit random secret with `crypto.randomBytes(32)` |
+| 2 | Gemini client crashes on import | `new GoogleGenerativeAI('gemini-2.5-flash-lite')` — model name used as API key | Fixed default fallback to empty string |
+| 3 | `GET /student/materials/download` → 400 "Invalid subject_id" | Route `/materials/:subject_id` registered before `/materials/download` | Moved `/materials/download` route above `/:subject_id` |
+| 4 | `GET /class-incharge/students/at-risk` → 404 | Route `/students/:uid/portfolio` registered before `/students/at-risk` | Moved `/students/at-risk` above `/:uid` routes |
+| 5 | `POST /admin/config` → 400 "semester_type required" | Controller expected field `semester_type` but DB column is `active_semester_type` | Controller now accepts both field names |
+| 6 | DB missing 8 tables + missing columns | Migration file not applied | Created and applied `Database/migrations/002_full_schema_apply.sql` |
+
+### Endpoint Test Results
+
+| Module | Tested | Passing | Notes |
+|--------|--------|---------|-------|
+| Health | 1 | 1 | ✅ |
+| Auth (login + /me) | 4 | 4 | ✅ All 6 roles |
+| Admin | 10 | 10 | ✅ |
+| HOD | 6 | 6 | ✅ |
+| Class Incharge | 5 | 5 | ✅ |
+| Subject Incharge | 2 | 2 | ✅ (active-slot returns 404 when no slot — correct) |
+| Teacher Guardian | 3 | 3 | ✅ |
+| Student | 6 | 6 | ✅ |
+| **Total** | **37** | **37** | ✅ 100% |
+
+### Database Migrations Applied
+
+| File | Purpose |
+|------|---------|
+| `Database/schema.sql` | Base 10 tables + 2 views + trigger |
+| `Database/migrations/002_full_schema_apply.sql` | App-layer columns (password_hash, is_admin, is_hod, has_lab) + 8 new tables (lab system, aicte_points, tg_assignment) |
+| `Database/migrations/003_seed_data.sql` | Test seed data — 5 faculty (all roles) + 1 student + subject + timetable slot |
+
+### Git Commits (Phase 1 Backend)
+
+All features were committed individually to GitHub (https://github.com/Rishit1769/StratosERP) with descriptive commit messages:
+
+1. `feat(scaffold)` — project structure, package.json, tsconfig, .env.example
+2. `feat(config)` — database, MinIO, Gemini config
+3. `feat(auth)` — JWT middleware, RBAC, auth routes
+4. `feat(admin)` — full admin module
+5. `feat(hod)` — HOD module
+6. `feat(class-incharge)` — Class Incharge module
+7. `feat(subject-incharge)` — Subject Incharge module
+8. `feat(practical-teacher)` — Practical Teacher module
+9. `feat(teacher-guardian)` — Teacher Guardian module
+10. `feat(student)` — Student module
+11. `feat(ai)` — Gemini AI service
+12. `feat(minio)` — MinIO service
+13. `fix(*)` — All bug fixes + DB migration
+14. `test` — Comprehensive API test script
+
+---
 
 ### Objective
 Design and implement the foundational relational database for StratosERP covering students, faculty, subjects, timetable management, grievances, leave, and notices.
