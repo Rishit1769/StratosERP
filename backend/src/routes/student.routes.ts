@@ -21,8 +21,8 @@ router.get('/grievances', studentCtrl.getMyGrievances);
 router.get('/notices', studentCtrl.getNotices);
 
 // Study Materials
-router.get('/materials/:subject_id', studentCtrl.getMaterials);
 router.get('/materials/download', studentCtrl.downloadMaterial);
+router.get('/materials/:subject_id', studentCtrl.getMaterials);
 
 // Lab Marks
 router.get('/lab-marks', studentCtrl.getLabMarks);

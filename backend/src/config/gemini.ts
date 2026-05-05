@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'gemini-2.5-flash-lite');
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export function getGeminiModel() {
   return genAI.getGenerativeModel({
