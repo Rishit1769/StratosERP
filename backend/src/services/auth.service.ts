@@ -3,13 +3,19 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Role, JwtPayload } from '../types';
 
-// UID regex: e.g. 2021-CE-A-01-2025
-const UID_REGEX = /^\d{4}-[A-Z]{2,3}-[A-Z]-\d{2}-\d{4}$/;
+const ALLOWED_EMAIL_DOMAIN = '@tcetmumbai.in';
+
+function isAllowedDomainEmail(email: string): boolean {
+  return email.toLowerCase().endsWith(ALLOWED_EMAIL_DOMAIN);
+}
 
 export async function loginFaculty(email: string, password: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!isAllowedDomainEmail(normalizedEmail)) return null;
+
   const [rows] = await pool.query<any[]>(
     'SELECT * FROM faculty WHERE email_id = ?',
-    [email]
+    [normalizedEmail]
   );
   if (!rows.length) return null;
 
@@ -42,10 +48,13 @@ export async function loginFaculty(email: string, password: string) {
 }
 
 export async function loginStudent(email: string, password: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!isAllowedDomainEmail(normalizedEmail)) return null;
+
   // Students log in by institutional email
   const [rows] = await pool.query<any[]>(
     'SELECT * FROM student WHERE email_id = ?',
-    [email]
+    [normalizedEmail]
   );
   if (!rows.length) return null;
 

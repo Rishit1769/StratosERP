@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 
 const TOKEN_KEY = "stratos.jwtToken";
 const DEFAULT_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
+const ALLOWED_EMAIL_DOMAIN = "@tcetmumbai.in";
 
 type LoginApiResponse = {
   success?: boolean;
@@ -21,8 +22,8 @@ type ProxyResponse = {
 };
 
 export default function AuthWorkbench() {
-  const [email, setEmail] = useState("admin@stratos.edu");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("admin@tcetmumbai.in");
+  const [password, setPassword] = useState("159753");
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -33,6 +34,11 @@ export default function AuthWorkbench() {
 
     if (!trimmedEmail || !password) {
       setFeedback("Please enter both email and password.");
+      return;
+    }
+
+    if (!trimmedEmail.toLowerCase().endsWith(ALLOWED_EMAIL_DOMAIN)) {
+      setFeedback(`Only ${ALLOWED_EMAIL_DOMAIN} email addresses are allowed.`);
       return;
     }
 
@@ -97,8 +103,10 @@ export default function AuthWorkbench() {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             className="mt-2 w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500 focus:bg-white"
-            placeholder="admin@stratos.edu"
+            placeholder="admin@tcetmumbai.in"
             autoComplete="email"
+            pattern="^[^\\s@]+@tcetmumbai\\.in$"
+            title="Use your @tcetmumbai.in email"
             required
           />
         </label>
@@ -110,7 +118,7 @@ export default function AuthWorkbench() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             className="mt-2 w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500 focus:bg-white"
-            placeholder="password123"
+            placeholder="159753"
             autoComplete="current-password"
             required
           />

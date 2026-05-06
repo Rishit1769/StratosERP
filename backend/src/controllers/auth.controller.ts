@@ -2,8 +2,16 @@ import { Request, Response } from 'express';
 import * as authService from '../services/auth.service';
 import { body, validationResult } from 'express-validator';
 
+const ALLOWED_EMAIL_DOMAIN = '@tcetmumbai.in';
+
 export const loginValidation = [
-  body('email').isEmail().normalizeEmail(),
+  body('email')
+    .isEmail()
+    .withMessage('A valid email is required.')
+    .bail()
+    .normalizeEmail()
+    .custom((value: string) => value.toLowerCase().endsWith(ALLOWED_EMAIL_DOMAIN))
+    .withMessage(`Only ${ALLOWED_EMAIL_DOMAIN} email addresses are allowed.`),
   body('password').isLength({ min: 6 }),
 ];
 
