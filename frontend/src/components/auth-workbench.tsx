@@ -1,16 +1,34 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import type { RoleSlug } from "@/lib/role-blueprints";
 
 const TOKEN_KEY = "stratos.jwtToken";
 const DEFAULT_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
 const ALLOWED_EMAIL_DOMAIN = "@tcetmumbai.in";
+
+const ROLE_TO_SLUG: Record<string, RoleSlug> = {
+  Admin: "admin",
+  HOD: "hod",
+  ClassIncharge: "class-incharge",
+  SubjectIncharge: "subject-incharge",
+  PracticalTeacher: "practical-teacher",
+  TG: "teacher-guardian",
+  Student: "student",
+};
 
 type LoginApiResponse = {
   success?: boolean;
   message?: string;
   data?: {
     token?: string;
+    faculty?: {
+      role?: string;
+    };
+    student?: {
+      role?: string;
+    };
   };
 };
 
@@ -21,7 +39,37 @@ type ProxyResponse = {
   error?: string;
 };
 
+function decodeJwtRole(token: string): string | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+
+    const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, "=");
+    const parsed = JSON.parse(atob(padded)) as { role?: unknown };
+
+    return typeof parsed.role === "string" ? parsed.role : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractRole(loginData?: LoginApiResponse["data"]): string | null {
+  const facultyRole = loginData?.faculty?.role;
+  if (typeof facultyRole === "string") return facultyRole;
+
+  const studentRole = loginData?.student?.role;
+  if (typeof studentRole === "string") return studentRole;
+
+  if (typeof loginData?.token === "string") {
+    return decodeJwtRole(loginData.token);
+  }
+
+  return null;
+}
+
 export default function AuthWorkbench() {
+  const router = useRouter();
   const [email, setEmail] = useState("admin@tcetmumbai.in");
   const [password, setPassword] = useState("159753");
   const [loading, setLoading] = useState(false);
@@ -70,10 +118,20 @@ export default function AuthWorkbench() {
           return;
         }
 
-        const token = payload.data?.data?.token;
+        const loginData = payload.data?.data;
+        const token = loginData?.token;
         if (payload.ok && token) {
           window.localStorage.setItem(TOKEN_KEY, token);
-          setFeedback("Login successful.");
+          const role = extractRole(loginData);
+          const roleSlug = role ? ROLE_TO_SLUG[role] : undefined;
+
+          if (!roleSlug) {
+            setFeedback("Login successful, but your role is not mapped to a portal yet.");
+            return;
+          }
+
+          setFeedback(`Login successful. Redirecting to ${role} portal...`);
+          router.push(`/portal/${roleSlug}`);
           return;
         }
 
