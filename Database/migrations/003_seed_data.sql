@@ -14,35 +14,31 @@ WHERE uid = '2021-CE-A-01-2025'
 
 -- Ensure only one seeded login account is maintained: admin@tcetmumbai.in
 -- Seed password: 159753
-UPDATE faculty
-SET designation_role = 'Subject Incharge',
-    is_admin = 1,
-    is_hod = 0,
-    password_hash = '$2a$12$MH8yz58CwaYYWPklBq5g4OVfMkpP.jD6XIbZxFnFefj5k.4c6gq7K'
-WHERE email_id = 'admin@tcetmumbai.in';
+CREATE TABLE IF NOT EXISTS admin_user (
+  admin_id      INT AUTO_INCREMENT PRIMARY KEY,
+  name          VARCHAR(100) NOT NULL,
+  email_id      VARCHAR(150) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL
+);
 
-UPDATE faculty
-SET email_id = 'admin@tcetmumbai.in',
-    designation_role = 'Subject Incharge',
-    is_admin = 1,
-    is_hod = 0,
+UPDATE admin_user
+SET name = 'Admin User',
+    email_id = 'admin@tcetmumbai.in',
     password_hash = '$2a$12$MH8yz58CwaYYWPklBq5g4OVfMkpP.jD6XIbZxFnFefj5k.4c6gq7K'
-WHERE email_id = 'admin@stratoserp.edu'
-  AND NOT EXISTS (
-    SELECT 1
-    FROM faculty
-    WHERE email_id = 'admin@tcetmumbai.in'
-  );
+WHERE email_id IN ('admin@tcetmumbai.in', 'admin@stratoserp.edu');
 
-INSERT INTO faculty (name, email_id, designation_role, is_admin, is_hod, password_hash)
-SELECT 'Admin User', 'admin@tcetmumbai.in', 'Subject Incharge', 1, 0,
+INSERT INTO admin_user (name, email_id, password_hash)
+SELECT 'Admin User', 'admin@tcetmumbai.in',
        '$2a$12$MH8yz58CwaYYWPklBq5g4OVfMkpP.jD6XIbZxFnFefj5k.4c6gq7K'
 FROM DUAL
 WHERE NOT EXISTS (
   SELECT 1
-  FROM faculty
+  FROM admin_user
   WHERE email_id = 'admin@tcetmumbai.in'
 );
+
+DELETE FROM faculty
+WHERE email_id IN ('admin@tcetmumbai.in', 'admin@stratoserp.edu');
 
 -- Global config (active_semester_type must be 'ODD' or 'EVEN')
 INSERT INTO global_config (active_semester_type, start_date, end_date)

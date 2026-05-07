@@ -68,7 +68,7 @@ const CSV_TEMPLATES: Record<string, string> = {
   "admin-ingest-students":
     "uid,email_id,current_semester,academic_year,password\n2023-CSE-A-01-2027,student1@tcetmumbai.in,5,3rd,Welcome@123\n",
   "admin-ingest-faculty":
-    "name,email_id,designation_role,is_admin,is_hod,password\nProf. A Patil,apatil@tcetmumbai.in,Subject Incharge,false,false,Faculty@123\n",
+    "name,email_id,designation_role,is_hod,password\nProf. A Patil,apatil@tcetmumbai.in,Subject Incharge,false,Faculty@123\n",
   "admin-ingest-subjects":
     "name,semester_level,has_lab,lab_marks_weight\nData Structures,3,true,30\n",
   "admin-ingest-timetable":

@@ -1,7 +1,7 @@
 -- =============================================================
 -- StratosERP Phase-I — Application Layer Extensions
 -- Migration: 2026-05-05
--- Adds password_hash, is_admin, is_hod flags, aicte_points table,
+-- Adds password_hash, is_hod, admin_user table, aicte_points table,
 -- and tg_assignment table required by the backend.
 -- =============================================================
 
@@ -10,8 +10,15 @@ USE StratosERP;
 -- Add password_hash and flag columns to faculty
 ALTER TABLE faculty
   ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) NOT NULL DEFAULT '',
-  ADD COLUMN IF NOT EXISTS is_admin       BOOLEAN     NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS is_hod         BOOLEAN     NOT NULL DEFAULT FALSE;
+
+-- Dedicated admin identity table
+CREATE TABLE IF NOT EXISTS admin_user (
+  admin_id      INT AUTO_INCREMENT PRIMARY KEY,
+  name          VARCHAR(100) NOT NULL,
+  email_id      VARCHAR(150) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL
+);
 
 -- Add password_hash to student
 ALTER TABLE student

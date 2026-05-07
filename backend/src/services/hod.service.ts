@@ -18,7 +18,7 @@ export async function assignFacultyRole(facultyId: number, role: string) {
 
 export async function listFacultyByDepartment() {
   const [rows] = await pool.query<any[]>(
-    'SELECT faculty_id, name, email_id, designation_role, is_hod FROM faculty WHERE is_admin = 0'
+    'SELECT faculty_id, name, email_id, designation_role, is_hod FROM faculty'
   );
   return rows;
 }

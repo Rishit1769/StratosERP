@@ -4,6 +4,9 @@ import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
+// POST /api/auth/login/admin
+router.post('/login/admin', authController.loginValidation, authController.loginAdmin);
+
 // POST /api/auth/login/faculty
 router.post('/login/faculty', authController.loginValidation, authController.loginFaculty);
 

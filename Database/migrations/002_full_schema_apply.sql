@@ -19,10 +19,6 @@ BEGIN
     ALTER TABLE faculty ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT '';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
-    WHERE TABLE_SCHEMA='StratosERP' AND TABLE_NAME='faculty' AND COLUMN_NAME='is_admin') THEN
-    ALTER TABLE faculty ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA='StratosERP' AND TABLE_NAME='faculty' AND COLUMN_NAME='is_hod') THEN
     ALTER TABLE faculty ADD COLUMN is_hod BOOLEAN NOT NULL DEFAULT FALSE;
   END IF;
@@ -30,6 +26,16 @@ END$$
 DELIMITER ;
 CALL sp_migrate_faculty();
 DROP PROCEDURE IF EXISTS sp_migrate_faculty;
+
+-- =============================================================
+-- STEP 1A: Ensure ADMIN_USER table exists
+-- =============================================================
+CREATE TABLE IF NOT EXISTS admin_user (
+  admin_id      INT AUTO_INCREMENT PRIMARY KEY,
+  name          VARCHAR(100) NOT NULL,
+  email_id      VARCHAR(150) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL
+);
 
 -- =============================================================
 -- STEP 2: Conditionally add password_hash to STUDENT

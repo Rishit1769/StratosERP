@@ -9,6 +9,36 @@ function isAllowedDomainEmail(email: string): boolean {
   return email.toLowerCase().endsWith(ALLOWED_EMAIL_DOMAIN);
 }
 
+export async function loginAdmin(email: string, password: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!isAllowedDomainEmail(normalizedEmail)) return null;
+
+  const [rows] = await pool.query<any[]>(
+    'SELECT * FROM admin_user WHERE email_id = ?',
+    [normalizedEmail]
+  );
+  if (!rows.length) return null;
+
+  const admin = rows[0];
+  const valid = await bcrypt.compare(password, admin.password_hash);
+  if (!valid) return null;
+
+  const payload: JwtPayload = { id: admin.admin_id, role: 'Admin', email: admin.email_id };
+  const token = jwt.sign(payload, process.env.JWT_SECRET as string, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+  } as jwt.SignOptions);
+
+  return {
+    token,
+    admin: {
+      id: admin.admin_id,
+      name: admin.name,
+      email: admin.email_id,
+      role: 'Admin',
+    },
+  };
+}
+
 export async function loginFaculty(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!isAllowedDomainEmail(normalizedEmail)) return null;
@@ -25,9 +55,7 @@ export async function loginFaculty(email: string, password: string) {
 
   // Map designation_role to JWT role
   let role: Role;
-  if (faculty.is_admin) {
-    role = 'Admin';
-  } else if (faculty.is_hod) {
+  if (faculty.is_hod) {
     role = 'HOD';
   } else {
     // designation_role can be 'Class Incharge', 'Subject Incharge', 'TG'
@@ -79,8 +107,8 @@ export async function changePassword(
   oldPassword: string,
   newPassword: string
 ): Promise<boolean> {
-  const table = role === 'Student' ? 'student' : 'faculty';
-  const idCol = role === 'Student' ? 'uid' : 'faculty_id';
+  const table = role === 'Student' ? 'student' : role === 'Admin' ? 'admin_user' : 'faculty';
+  const idCol = role === 'Student' ? 'uid' : role === 'Admin' ? 'admin_id' : 'faculty_id';
 
   const [rows] = await pool.query<any[]>(`SELECT password_hash FROM ${table} WHERE ${idCol} = ?`, [id]);
   if (!rows.length) return false;

@@ -30,6 +30,21 @@ export async function loginFaculty(req: Request, res: Response): Promise<void> {
   res.json({ success: true, message: 'Login successful.', data: result });
 }
 
+export async function loginAdmin(req: Request, res: Response): Promise<void> {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    res.status(400).json({ success: false, message: 'Validation failed', error: errors.array() });
+    return;
+  }
+  const { email, password } = req.body;
+  const result = await authService.loginAdmin(email, password);
+  if (!result) {
+    res.status(401).json({ success: false, message: 'Invalid credentials.' });
+    return;
+  }
+  res.json({ success: true, message: 'Login successful.', data: result });
+}
+
 export async function loginStudent(req: Request, res: Response): Promise<void> {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {

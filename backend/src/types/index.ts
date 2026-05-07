@@ -33,7 +33,7 @@ export type FacultyDesignation = 'Class Incharge' | 'Subject Incharge' | 'TG';
 
 // JWT payload
 export interface JwtPayload {
-  id: number | string; // faculty_id or student uid
+  id: number | string; // admin_id or faculty_id or student uid
   role: Role;
   email: string;
   iat?: number;

@@ -23,6 +23,9 @@ type LoginApiResponse = {
   message?: string;
   data?: {
     token?: string;
+    admin?: {
+      role?: string;
+    };
     faculty?: {
       role?: string;
     };
@@ -55,6 +58,9 @@ function decodeJwtRole(token: string): string | null {
 }
 
 function extractRole(loginData?: LoginApiResponse["data"]): string | null {
+  const adminRole = loginData?.admin?.role;
+  if (typeof adminRole === "string") return adminRole;
+
   const facultyRole = loginData?.faculty?.role;
   if (typeof facultyRole === "string") return facultyRole;
 
@@ -94,7 +100,7 @@ export default function AuthWorkbench() {
     setFeedback(null);
 
     try {
-      const loginPaths = ["/api/auth/login/faculty", "/api/auth/login/student"];
+      const loginPaths = ["/api/auth/login/admin", "/api/auth/login/faculty", "/api/auth/login/student"];
       let lastErrorMessage = "Invalid credentials. Please check your email and password.";
 
       for (const path of loginPaths) {

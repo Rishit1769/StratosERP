@@ -50,6 +50,17 @@ CREATE TABLE faculty (
 );
 
 -- =============================================================
+-- TABLE 3A: ADMIN_USER
+-- Dedicated admin identity table (separate from faculty records).
+-- =============================================================
+CREATE TABLE admin_user (
+  admin_id       INT AUTO_INCREMENT PRIMARY KEY,
+  name           VARCHAR(100) NOT NULL,
+  email_id       VARCHAR(150) NOT NULL UNIQUE,
+  password_hash  VARCHAR(255) NOT NULL
+);
+
+-- =============================================================
 -- TABLE 4: STUDENT
 -- UID Format: [StartYear]-[Class]-[Division]-[RollNo]-[EndYear]
 -- Example:    2021-CE-A-01-2025

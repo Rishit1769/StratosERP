@@ -95,6 +95,7 @@ PORT=5000
 #### Auth  `/api/auth`
 | Method | Path | Access | Description |
 |--------|------|--------|-------------|
+| POST | `/login/admin` | Public | Admin login → JWT |
 | POST | `/login/faculty` | Public | Faculty login → JWT |
 | POST | `/login/student` | Public | Student login → JWT |
 | POST | `/change-password` | Authenticated | Change own password |
@@ -242,7 +243,7 @@ PORT=5000
 | File | Purpose |
 |------|---------|
 | `Database/schema.sql` | Base 10 tables + 2 views + trigger |
-| `Database/migrations/002_full_schema_apply.sql` | App-layer columns (password_hash, is_admin, is_hod, has_lab) + 8 new tables (lab system, aicte_points, tg_assignment) |
+| `Database/migrations/002_full_schema_apply.sql` | App-layer columns (password_hash, is_hod, has_lab) + admin_user + 8 new tables (lab system, aicte_points, tg_assignment) |
 | `Database/migrations/003_seed_data.sql` | Test seed data — 5 faculty (all roles) + 1 student + subject + timetable slot |
 
 ### Git Commits (Phase 1 Backend)

@@ -100,12 +100,12 @@ export async function bulkIngestFaculty(csvBuffer: Buffer): Promise<{ inserted: 
   const errors: string[] = [];
 
   for (const row of records) {
-    const { name, email_id, designation_role, is_admin, is_hod, password } = row;
+    const { name, email_id, designation_role, is_hod, password } = row;
     try {
       const hash = await bcrypt.hash(password || 'Faculty@123', 12);
       await pool.query(
-        'INSERT IGNORE INTO faculty (name, email_id, designation_role, is_admin, is_hod, password_hash) VALUES (?, ?, ?, ?, ?, ?)',
-        [name, email_id, designation_role, is_admin === 'true' ? 1 : 0, is_hod === 'true' ? 1 : 0, hash]
+        'INSERT IGNORE INTO faculty (name, email_id, designation_role, is_hod, password_hash) VALUES (?, ?, ?, ?, ?)',
+        [name, email_id, designation_role, is_hod === 'true' ? 1 : 0, hash]
       );
       inserted++;
     } catch (err: any) {
@@ -386,7 +386,6 @@ export async function generateInvigilationMatrix(examDate: string): Promise<any[
            COUNT(ls.leave_id) AS on_leave
     FROM faculty f
     LEFT JOIN leave_substitution ls ON f.faculty_id = ls.absent_faculty_id AND ls.leave_date = ?
-    WHERE f.is_admin = 0
     GROUP BY f.faculty_id
     HAVING on_leave = 0
     ORDER BY f.faculty_id
@@ -432,18 +431,18 @@ export async function getMacroAnalytics() {
 // ── Faculty & Student Management ─────────────────────────────
 
 export async function createFaculty(data: {
-  name: string; email_id: string; designation_role: string; is_admin?: boolean; is_hod?: boolean; password: string;
+  name: string; email_id: string; designation_role: string; is_hod?: boolean; password: string;
 }) {
   const hash = await bcrypt.hash(data.password, 12);
   const [result] = await pool.query<any>(
-    'INSERT INTO faculty (name, email_id, designation_role, is_admin, is_hod, password_hash) VALUES (?, ?, ?, ?, ?, ?)',
-    [data.name, data.email_id, data.designation_role, data.is_admin ? 1 : 0, data.is_hod ? 1 : 0, hash]
+    'INSERT INTO faculty (name, email_id, designation_role, is_hod, password_hash) VALUES (?, ?, ?, ?, ?)',
+    [data.name, data.email_id, data.designation_role, data.is_hod ? 1 : 0, hash]
   );
   return result.insertId;
 }
 
 export async function listAllFaculty() {
-  const [rows] = await pool.query<any[]>('SELECT faculty_id, name, email_id, designation_role, is_admin, is_hod FROM faculty');
+  const [rows] = await pool.query<any[]>('SELECT faculty_id, name, email_id, designation_role, is_hod FROM faculty');
   return rows;
 }
 

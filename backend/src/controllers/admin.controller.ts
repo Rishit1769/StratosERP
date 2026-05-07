@@ -117,12 +117,12 @@ export async function getMacroAnalytics(req: Request, res: Response): Promise<vo
 // ── Faculty & Student ────────────────────────────────────────
 
 export async function createFaculty(req: Request, res: Response): Promise<void> {
-  const { name, email_id, designation_role, is_admin, is_hod, password } = req.body;
+  const { name, email_id, designation_role, is_hod, password } = req.body;
   if (!name || !email_id || !designation_role || !password) {
     res.status(400).json({ success: false, message: 'name, email_id, designation_role, password are required.' });
     return;
   }
-  const id = await adminService.createFaculty({ name, email_id, designation_role, is_admin, is_hod, password });
+  const id = await adminService.createFaculty({ name, email_id, designation_role, is_hod, password });
   res.status(201).json({ success: true, message: 'Faculty created.', data: { faculty_id: id } });
 }
 
