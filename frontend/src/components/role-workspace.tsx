@@ -1,6 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import type { ActionBlueprint, RoleBlueprint } from "@/lib/role-blueprints";
 
 type ActionState = {
@@ -19,8 +32,19 @@ type SidebarSection = {
   actionIds: string[];
 };
 
+type NoticeMode = "manual" | "ai";
+
+type ProxyEnvelope = {
+  ok: boolean;
+  status: number;
+  durationMs: number;
+  data: unknown;
+  error?: string;
+};
+
 const TOKEN_KEY = "stratos.jwtToken";
 const DEFAULT_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
+const PIE_COLORS = ["#334155", "#22c55e", "#f97316", "#06b6d4", "#a855f7", "#ef4444"];
 
 const CSV_TEMPLATES: Record<string, string> = {
   "admin-ingest-students":
@@ -228,8 +252,8 @@ function buildSections(role: RoleBlueprint): SidebarSection[] {
     {
       id: "semester",
       title: "Semester Progression",
-      detail: "Promotion and transition controls",
-      actionIds: ["admin-progress", "admin-config-get"],
+      detail: "Increase semester for eligible students",
+      actionIds: ["admin-config-get"],
     },
     {
       id: "exams",
@@ -240,15 +264,62 @@ function buildSections(role: RoleBlueprint): SidebarSection[] {
     {
       id: "notices",
       title: "Notices",
-      detail: "Create and review notices",
-      actionIds: ["admin-notice-create", "admin-notice-ai", "admin-notice-list"],
+      detail: "Manual or AI-assisted notice publishing",
+      actionIds: ["admin-notice-list"],
     },
     {
       id: "records",
       title: "Records",
-      detail: "Faculty, students, alumni and analytics",
-      actionIds: ["admin-faculty-list", "admin-students-list", "admin-alumni-list", "admin-analytics"],
+      detail: "Faculty, students and alumni data",
+      actionIds: ["admin-faculty-list", "admin-students-list", "admin-alumni-list"],
     },
+  ];
+}
+
+function pickDataObject(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  const root = payload as Record<string, unknown>;
+  const data = root.data;
+
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    return data as Record<string, unknown>;
+  }
+
+  return root;
+}
+
+function extractAnalyticsBars(payload: unknown): Array<{ name: string; value: number }> {
+  const data = pickDataObject(payload);
+  if (!data) return [];
+
+  const mapping: Array<{ key: string; label: string }> = [
+    { key: "total_students", label: "Students" },
+    { key: "total_faculty", label: "Faculty" },
+    { key: "total_subjects", label: "Subjects" },
+    { key: "kt_records", label: "KT" },
+    { key: "suppli_records", label: "SUPPLI" },
+    { key: "alumni_count", label: "Alumni" },
+  ];
+
+  return mapping
+    .map((item) => ({
+      name: item.label,
+      value: Number(data[item.key] ?? 0),
+    }))
+    .filter((entry) => Number.isFinite(entry.value));
+}
+
+function extractProgressionSlices(payload: unknown): Array<{ name: string; value: number }> {
+  const data = pickDataObject(payload);
+  if (!data) return [];
+
+  const progressed = Number(data.progressed ?? 0);
+  const alumniTransitions = Number(data.alumniTransitions ?? 0);
+
+  return [
+    { name: "Semester Increased", value: Number.isFinite(progressed) ? progressed : 0 },
+    { name: "Moved to Alumni", value: Number.isFinite(alumniTransitions) ? alumniTransitions : 0 },
   ];
 }
 
@@ -268,6 +339,18 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
   const [fileMap, setFileMap] = useState<Record<string, File | null>>({});
   const [csvFileMap, setCsvFileMap] = useState<Record<string, File | null>>({});
   const [actionState, setActionState] = useState<Record<string, ActionState>>({});
+  const [noticeMode, setNoticeMode] = useState<NoticeMode>("manual");
+  const [manualNotice, setManualNotice] = useState({
+    title: "",
+    target_audience: "INSTITUTE",
+    ai_filter_tags: "",
+  });
+  const [aiNotice, setAiNotice] = useState({
+    context: "",
+    target_audience: "INSTITUTE",
+  });
+  const [noticeSubmitting, setNoticeSubmitting] = useState(false);
+  const [noticeFeedback, setNoticeFeedback] = useState<string | null>(null);
 
   useEffect(() => {
     const storedToken = window.localStorage.getItem(TOKEN_KEY) || "";
@@ -284,6 +367,10 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
     setActionState({});
     setSearchQuery("");
     setSelectedSectionId(sections[0]?.id || "operations");
+    setNoticeMode("manual");
+    setManualNotice({ title: "", target_audience: "INSTITUTE", ai_filter_tags: "" });
+    setAiNotice({ context: "", target_audience: "INSTITUTE" });
+    setNoticeFeedback(null);
   }, [role.actions, sections]);
 
   const selectedSection = sections.find((section) => section.id === selectedSectionId) || sections[0];
@@ -304,6 +391,54 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
       );
     });
   }, [actionById, searchQuery, selectedSection]);
+
+  async function sendJson(path: string, method: ActionBlueprint["method"], bodyText = ""): Promise<ProxyEnvelope> {
+    const response = await fetch("/api/proxy", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        baseUrl: DEFAULT_BASE_URL,
+        path,
+        method,
+        token: token.trim(),
+        bodyText,
+      }),
+    });
+
+    const payload = (await response.json()) as ProxyEnvelope;
+    return {
+      ...payload,
+      ok: response.ok && payload.ok,
+    };
+  }
+
+  async function sendMultipart(
+    action: ActionBlueprint,
+    selectedFile: File,
+    parsedBody: Record<string, unknown>
+  ): Promise<ProxyEnvelope> {
+    const formData = new FormData();
+    formData.set("baseUrl", DEFAULT_BASE_URL);
+    formData.set("path", action.path);
+    formData.set("method", action.method);
+    formData.set("fieldsJson", JSON.stringify(parsedBody));
+    formData.set("fileFieldName", action.fileFieldName || "file");
+    formData.set("token", token.trim());
+    formData.set("file", selectedFile);
+
+    const response = await fetch("/api/proxy", {
+      method: "POST",
+      body: formData,
+    });
+
+    const payload = (await response.json()) as ProxyEnvelope;
+    return {
+      ...payload,
+      ok: response.ok && payload.ok,
+    };
+  }
 
   function downloadTemplate(action: ActionBlueprint): void {
     const template = CSV_TEMPLATES[action.id] || buildBodyTemplate(action);
@@ -392,7 +527,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
     const bodyText = bodyMap[action.id] || "";
     const isMultipart = action.transport === "multipart";
     const selectedFile = fileMap[action.id] || null;
-    let parsedBody: Record<string, unknown> | undefined;
+    let parsedBody: Record<string, unknown> = {};
 
     if (action.method !== "GET" && action.method !== "DELETE" && bodyText.trim()) {
       try {
@@ -432,55 +567,19 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
     }));
 
     try {
-      const response = await (async () => {
-        if (!isMultipart) {
-          return fetch("/api/proxy", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              baseUrl: DEFAULT_BASE_URL,
-              path: action.path,
-              method: action.method,
-              token: token.trim(),
-              bodyText,
-            }),
-          });
-        }
-
-        const formData = new FormData();
-        formData.set("baseUrl", DEFAULT_BASE_URL);
-        formData.set("path", action.path);
-        formData.set("method", action.method);
-        formData.set("fieldsJson", JSON.stringify(parsedBody || {}));
-        formData.set("fileFieldName", action.fileFieldName || "file");
-        formData.set("token", token.trim());
-        formData.set("file", selectedFile as File);
-
-        return fetch("/api/proxy", {
-          method: "POST",
-          body: formData,
-        });
-      })();
-
-      const proxyPayload = (await response.json()) as {
-        ok: boolean;
-        status: number;
-        durationMs: number;
-        data: unknown;
-        error?: string;
-      };
+      const result = isMultipart
+        ? await sendMultipart(action, selectedFile as File, parsedBody)
+        : await sendJson(action.path, action.method, bodyText);
 
       setActionState((prev) => ({
         ...prev,
         [action.id]: {
           loading: false,
-          ok: response.ok && proxyPayload.ok,
-          status: proxyPayload.status,
-          durationMs: proxyPayload.durationMs,
-          payload: proxyPayload.data,
-          error: response.ok ? undefined : proxyPayload.error || "Request failed.",
+          ok: result.ok,
+          status: result.status,
+          durationMs: result.durationMs,
+          payload: result.data,
+          error: result.ok ? undefined : result.error || "Request failed.",
         },
       }));
     } catch (error) {
@@ -493,6 +592,77 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
       }));
     }
   }
+
+  async function submitNotice(): Promise<void> {
+    if (!token.trim()) {
+      setNoticeFeedback("Please login first.");
+      return;
+    }
+
+    const payload =
+      noticeMode === "manual"
+        ? {
+            title: manualNotice.title,
+            target_audience: manualNotice.target_audience,
+            ai_filter_tags: manualNotice.ai_filter_tags
+              .split(/[|;,]/)
+              .map((tag) => tag.trim())
+              .filter(Boolean),
+          }
+        : {
+            context: aiNotice.context,
+            target_audience: aiNotice.target_audience,
+          };
+
+    const path = noticeMode === "manual" ? "/api/admin/notices" : "/api/admin/notices/ai";
+
+    setNoticeSubmitting(true);
+    setNoticeFeedback(null);
+
+    try {
+      const result = await sendJson(path, "POST", JSON.stringify(payload));
+      if (!result.ok) {
+        setNoticeFeedback(`Notice submission failed (${result.status}).`);
+        return;
+      }
+
+      setNoticeFeedback("Notice submitted successfully.");
+
+      const noticeListAction = actionById["admin-notice-list"];
+      if (noticeListAction) {
+        await runAction(noticeListAction);
+      }
+    } catch (error) {
+      setNoticeFeedback(error instanceof Error ? error.message : "Failed to submit notice.");
+    } finally {
+      setNoticeSubmitting(false);
+    }
+  }
+
+  async function runIncreaseSemester(): Promise<void> {
+    const action = actionById["admin-progress"];
+    if (!action) return;
+
+    await runAction(action);
+
+    const configAction = actionById["admin-config-get"];
+    if (configAction) {
+      await runAction(configAction);
+    }
+
+    const analyticsAction = actionById["admin-analytics"];
+    if (analyticsAction) {
+      await runAction(analyticsAction);
+    }
+  }
+
+  const analyticsBars = useMemo(() => {
+    return extractAnalyticsBars(actionState["admin-analytics"]?.payload);
+  }, [actionState]);
+
+  const progressionSlices = useMemo(() => {
+    return extractProgressionSlices(actionState["admin-progress"]?.payload);
+  }, [actionState]);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[260px_1fr]">
@@ -543,6 +713,223 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
           <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             Please login from the launcher before using this workspace.
           </p>
+        ) : null}
+
+        {selectedSectionId === "semester" ? (
+          <article className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+            <h2 className="text-lg font-semibold text-zinc-900">Increase Semester</h2>
+            <p className="mt-1 text-sm text-zinc-600">
+              Use this to promote eligible students across the institution in one action.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void runIncreaseSemester()}
+                disabled={actionState["admin-progress"]?.loading}
+                className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-500"
+              >
+                {actionState["admin-progress"]?.loading ? "Processing..." : "Increase Semester"}
+              </button>
+              {actionState["admin-progress"]?.ok !== undefined ? (
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    actionState["admin-progress"]?.ok
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-rose-100 text-rose-800"
+                  }`}
+                >
+                  {actionState["admin-progress"]?.ok ? "Completed" : "Failed"}
+                </span>
+              ) : null}
+            </div>
+            {progressionSlices.some((slice) => slice.value > 0) ? (
+              <div className="mt-4 h-72 rounded-2xl border border-zinc-200 bg-white p-3">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={progressionSlices} dataKey="value" nameKey="name" outerRadius={95} label>
+                      {progressionSlices.map((entry, index) => (
+                        <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : null}
+          </article>
+        ) : null}
+
+        {selectedSectionId === "records" ? (
+          <article className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-zinc-900">Live Institutional Metrics</h2>
+                <p className="mt-1 text-sm text-zinc-600">Charts below are generated from backend analytics response.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const analyticsAction = actionById["admin-analytics"];
+                  if (analyticsAction) void runAction(analyticsAction);
+                }}
+                className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700"
+              >
+                Refresh Metrics
+              </button>
+            </div>
+            {analyticsBars.length > 0 ? (
+              <div className="mt-4 h-80 rounded-2xl border border-zinc-200 bg-white p-3">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={analyticsBars}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#111827" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <p className="mt-4 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-600">
+                Use Refresh Metrics to load chart data.
+              </p>
+            )}
+          </article>
+        ) : null}
+
+        {selectedSectionId === "notices" ? (
+          <article className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-zinc-900">Notice Composer</h2>
+                <p className="mt-1 text-sm text-zinc-600">Choose manual writing or AI draft with Gemini.</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNoticeMode("manual")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    noticeMode === "manual"
+                      ? "bg-zinc-900 text-white"
+                      : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                  }`}
+                >
+                  Manual Notice
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNoticeMode("ai")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    noticeMode === "ai"
+                      ? "bg-zinc-900 text-white"
+                      : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                  }`}
+                >
+                  AI Notice (Gemini)
+                </button>
+              </div>
+            </div>
+
+            {noticeMode === "manual" ? (
+              <div className="mt-4 grid gap-3">
+                <label>
+                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">Title</span>
+                  <input
+                    value={manualNotice.title}
+                    onChange={(event) =>
+                      setManualNotice((prev) => ({
+                        ...prev,
+                        title: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                    placeholder="Notice title"
+                  />
+                </label>
+                <label>
+                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">Audience</span>
+                  <select
+                    value={manualNotice.target_audience}
+                    onChange={(event) =>
+                      setManualNotice((prev) => ({
+                        ...prev,
+                        target_audience: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                  >
+                    <option value="INSTITUTE">INSTITUTE</option>
+                    <option value="BRANCH">BRANCH</option>
+                  </select>
+                </label>
+                <label>
+                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">Tags</span>
+                  <input
+                    value={manualNotice.ai_filter_tags}
+                    onChange={(event) =>
+                      setManualNotice((prev) => ({
+                        ...prev,
+                        ai_filter_tags: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                    placeholder="ACADEMIC, IMPORTANT"
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-3">
+                <label>
+                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">Context for AI Draft</span>
+                  <textarea
+                    value={aiNotice.context}
+                    onChange={(event) =>
+                      setAiNotice((prev) => ({
+                        ...prev,
+                        context: event.target.value,
+                      }))
+                    }
+                    rows={5}
+                    className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                    placeholder="Describe the notice to generate"
+                  />
+                </label>
+                <label>
+                  <span className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">Audience</span>
+                  <select
+                    value={aiNotice.target_audience}
+                    onChange={(event) =>
+                      setAiNotice((prev) => ({
+                        ...prev,
+                        target_audience: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                  >
+                    <option value="INSTITUTE">INSTITUTE</option>
+                    <option value="BRANCH">BRANCH</option>
+                  </select>
+                </label>
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void submitNotice()}
+                disabled={noticeSubmitting}
+                className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-500"
+              >
+                {noticeSubmitting ? "Submitting..." : "Publish Notice"}
+              </button>
+              {noticeFeedback ? (
+                <span className="rounded-full bg-zinc-200 px-3 py-1 text-xs font-semibold text-zinc-700">
+                  {noticeFeedback}
+                </span>
+              ) : null}
+            </div>
+          </article>
         ) : null}
 
         <div className="mt-5 space-y-4">

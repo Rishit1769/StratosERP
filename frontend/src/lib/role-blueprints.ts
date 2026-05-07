@@ -104,7 +104,7 @@ export const roleBlueprints: RoleBlueprint[] = [
         fileFieldName: "file",
       },
       { id: "admin-analytics", label: "Macro Analytics", description: "View institution-level stats.", method: "GET", path: "/api/admin/analytics" },
-      { id: "admin-progress", label: "Trigger Batch Progression", description: "Run semester transition progression.", method: "POST", path: "/api/admin/batch-progression" },
+      { id: "admin-progress", label: "Increase Semester", description: "Promote eligible students to the next semester across the system.", method: "POST", path: "/api/admin/batch-progression" },
       {
         id: "admin-exam-seating",
         label: "Generate Exam Seating",
