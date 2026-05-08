@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express from 'express';
-import { testConnection } from './config/database';
+import { ensureAuthSchema, testConnection } from './config/database';
 import { ensureBucketsExist } from './config/minio';
 
 // Route imports
@@ -46,6 +46,7 @@ app.use((_req, res) => {
 (async () => {
   try {
     await testConnection();
+    await ensureAuthSchema();
     const minioReady = await ensureBucketsExist();
     if (!minioReady) {
       console.warn('[Server] MinIO unavailable at startup. File storage endpoints will return 503 until MinIO is restored.');
