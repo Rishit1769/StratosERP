@@ -15,6 +15,11 @@ const pool = mysql.createPool({
   timezone: '+00:00',
 });
 
+const DEFAULT_ADMIN_NAME = process.env.SEED_ADMIN_NAME || 'Admin User';
+const DEFAULT_ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || 'admin@tcetmumbai.in';
+const DEFAULT_ADMIN_PASSWORD_HASH =
+  process.env.SEED_ADMIN_PASSWORD_HASH || '$2a$12$MH8yz58CwaYYWPklBq5g4OVfMkpP.jD6XIbZxFnFefj5k.4c6gq7K';
+
 export async function testConnection(): Promise<void> {
   const conn = await pool.getConnection();
   console.log('[DB] MySQL connection established successfully.');
@@ -72,6 +77,22 @@ export async function ensureAuthSchema(): Promise<void> {
     await pool.query("ALTER TABLE student ADD COLUMN password_hash VARCHAR(255) NOT NULL DEFAULT ''");
     console.log('[DB] Added missing column: student.password_hash');
   }
+
+  // Keep legacy seeded email aligned with current default email.
+  await pool.query(
+    'UPDATE admin_user SET name = ?, email_id = ? WHERE email_id = ?',
+    [DEFAULT_ADMIN_NAME, DEFAULT_ADMIN_EMAIL, 'admin@stratoserp.edu']
+  );
+
+  // Seed one default admin account if none exists for the configured email.
+  await pool.query(
+    `INSERT INTO admin_user (name, email_id, password_hash)
+     SELECT ?, ?, ?
+     WHERE NOT EXISTS (
+       SELECT 1 FROM admin_user WHERE email_id = ?
+     )`,
+    [DEFAULT_ADMIN_NAME, DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD_HASH, DEFAULT_ADMIN_EMAIL]
+  );
 }
 
 export default pool;
