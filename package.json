@@ -1,16 +1,29 @@
 {
-  "name": "stratoserp-workspace",
+  "name": "stratoserp",
   "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "concurrently --kill-others-on-fail -n backend,frontend -c blue,magenta \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
-    "dev:backend": "npm run dev --prefix backend",
-    "dev:frontend": "npm run dev --prefix frontend",
-    "build": "npm run build --prefix backend && npm run build --prefix frontend",
-    "build:backend": "npm run build --prefix backend",
-    "build:frontend": "npm run build --prefix frontend"
+    "dev": "turbo dev",
+    "dev:web": "turbo dev --filter=@stratoserp/web",
+    "dev:api": "turbo dev --filter=@stratoserp/api",
+    "build": "turbo build",
+    "build:web": "turbo build --filter=@stratoserp/web",
+    "build:api": "turbo build --filter=@stratoserp/api",
+    "lint": "turbo lint",
+    "clean": "turbo clean",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "typecheck": "turbo typecheck"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
-  }
+    "prettier": "^3.3.0",
+    "turbo": "^2.5.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "npm@10.0.0"
 }

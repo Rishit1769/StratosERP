@@ -1,7 +1,9 @@
 // =============================================================
 // StratosERP - Shared Type Definitions
+// Shared across @stratoserp/web and @stratoserp/api
 // =============================================================
 
+/** All user roles in the StratosERP system */
 export type Role =
   | 'Admin'
   | 'HOD'
@@ -31,29 +33,22 @@ export type AcademicYear = '1st' | '2nd' | '3rd' | '4th' | 'Alumni';
 
 export type FacultyDesignation = 'Class Incharge' | 'Subject Incharge' | 'TG';
 
-// JWT payload
+/** JWT token payload structure */
 export interface JwtPayload {
-  id: number | string; // admin_id or faculty_id or student uid
+  id: number | string;
   role: Role;
   email: string;
   iat?: number;
   exp?: number;
 }
 
-// Augment Express Request
-declare global {
-  namespace Express {
-    interface Request {
-      user?: JwtPayload;
-    }
-  }
-}
-
+/** Pagination query parameters */
 export interface PaginationQuery {
   page?: number;
   limit?: number;
 }
 
+/** Standard API response envelope */
 export interface ApiResponse<T = unknown> {
   success: boolean;
   message: string;
