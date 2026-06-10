@@ -36,8 +36,11 @@ export type FacultyDesignation = 'Class Incharge' | 'Subject Incharge' | 'TG';
 /** JWT token payload structure */
 export interface JwtPayload {
   id: number | string;
-  role: Role;
   email: string;
+  designations: Role[];
+  primaryRole?: Role;
+  activeRole?: Role;
+  role?: Role;
   iat?: number;
   exp?: number;
 }

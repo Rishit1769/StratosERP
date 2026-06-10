@@ -67,7 +67,7 @@ export async function changePassword(req: Request, res: Response): Promise<void>
     return;
   }
   const user = req.user!;
-  const changed = await authService.changePassword(user.id, user.role as any, oldPassword, newPassword);
+  const changed = await authService.changePassword(user.id, user.designations, oldPassword, newPassword);
   if (!changed) {
     res.status(400).json({ success: false, message: 'Old password is incorrect.' });
     return;
