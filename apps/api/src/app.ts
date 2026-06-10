@@ -14,6 +14,7 @@ import subjectInchargeRoutes from './routes/subjectIncharge.routes';
 import practicalTeacherRoutes from './routes/practicalTeacher.routes';
 import teacherGuardianRoutes from './routes/teacherGuardian.routes';
 import studentRoutes from './routes/student.routes';
+import storageRoutes from './routes/storage.routes';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -31,6 +32,7 @@ app.use('/api/subject-incharge', subjectInchargeRoutes);
 app.use('/api/practical-teacher', practicalTeacherRoutes);
 app.use('/api/teacher-guardian', teacherGuardianRoutes);
 app.use('/api/student', studentRoutes);
+app.use('/api/v1/storage', storageRoutes);
 
 // ── Health check ────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {

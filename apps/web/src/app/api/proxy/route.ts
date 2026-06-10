@@ -102,6 +102,21 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const isCsvUpload =
+        file.type === "text/csv" ||
+        file.name.toLowerCase().endsWith(".csv") ||
+        file.type === "application/vnd.ms-excel";
+
+      if (!isCsvUpload) {
+        return NextResponse.json(
+          {
+            error:
+              "Binary file uploads are no longer supported through /api/proxy. Request a presigned URL and upload directly to object storage instead.",
+          },
+          { status: 400 }
+        );
+      }
+
       const fileFieldNameValue = formData.get("fileFieldName");
       const fileFieldName =
         typeof fileFieldNameValue === "string" && fileFieldNameValue.trim()

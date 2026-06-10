@@ -5,6 +5,8 @@ dotenv.config();
 
 let minioAvailable = false;
 
+export const MINIO_PUBLIC_BASE_URL = process.env.MINIO_PUBLIC_BASE_URL?.trim() || '';
+
 const minioClient = new Client({
   endPoint: process.env.MINIO_ENDPOINT || 'localhost',
   port: Number(process.env.MINIO_PORT) || 9000,

@@ -25,7 +25,7 @@ router.post('/lecture-log', siCtrl.logLecture);
 router.get('/lecture-logs/:subject_id', siCtrl.getLectureLogs);
 
 // Study Materials
-router.post('/materials', siCtrl.fileUpload, siCtrl.uploadMaterial);
+router.post('/materials', siCtrl.uploadMaterial);
 
 // AI Syllabus Analysis
 router.post('/syllabus-analysis', siCtrl.syllabusAnalysis);

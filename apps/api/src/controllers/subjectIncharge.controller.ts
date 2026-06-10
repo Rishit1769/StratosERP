@@ -1,11 +1,6 @@
 import { Request, Response } from 'express';
 import * as siService from '../services/subjectIncharge.service';
-import * as minioService from '../services/minio.service';
 import * as geminiService from '../services/gemini.service';
-import multer from 'multer';
-
-const upload = multer({ storage: multer.memoryStorage() });
-export const fileUpload = upload.single('file');
 
 export async function getMySubjects(req: Request, res: Response): Promise<void> {
   const facultyId = req.user!.id as number;
@@ -89,16 +84,27 @@ export async function getLectureLogs(req: Request, res: Response): Promise<void>
 }
 
 export async function uploadMaterial(req: Request, res: Response): Promise<void> {
-  if (!req.file) { res.status(400).json({ success: false, message: 'File required.' }); return; }
-  try {
-    const { subject_id } = req.body;
-    const objectName = `subject-${subject_id}/${Date.now()}-${req.file.originalname}`;
-    const url = await minioService.uploadStudyMaterial(req.file.buffer, objectName, req.file.mimetype);
-    res.status(201).json({ success: true, message: 'Material uploaded.', data: { url, object_name: objectName } });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'File storage service unavailable.';
-    res.status(503).json({ success: false, message });
+  const { subject_id, fileKey, fileName, fileType, bucketName } = req.body;
+
+  if (!subject_id || !fileKey || !fileName || !fileType) {
+    res.status(400).json({
+      success: false,
+      message: 'subject_id, fileKey, fileName, and fileType are required.',
+    });
+    return;
   }
+
+  res.status(201).json({
+    success: true,
+    message: 'Material upload registered.',
+    data: {
+      subject_id: Number(subject_id),
+      object_name: fileKey,
+      file_name: fileName,
+      file_type: fileType,
+      bucket_name: bucketName || 'study-materials',
+    },
+  });
 }
 
 export async function syllabusAnalysis(req: Request, res: Response): Promise<void> {

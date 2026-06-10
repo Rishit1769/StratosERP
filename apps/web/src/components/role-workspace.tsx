@@ -38,6 +38,14 @@ type ProxyEnvelope = {
   error?: string;
 };
 
+type PresignedUrlPayload = {
+  fileKey: string;
+  bucketName: string;
+  uploadUrl?: string;
+  downloadUrl?: string;
+  expiresInSeconds: number;
+};
+
 type FieldSpec = {
   key: string;
   label: string;
@@ -759,6 +767,78 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
     };
   }, [token]);
 
+  const sendDirectUpload = useCallback(async (
+    action: ActionBlueprint,
+    selectedFile: File,
+    parsedBody: Record<string, unknown>
+  ): Promise<ProxyEnvelope> => {
+    const presigned = await sendJson(
+      "/api/v1/storage/presigned-url",
+      "POST",
+      JSON.stringify({
+        action: "upload",
+        fileName: selectedFile.name,
+        fileType: selectedFile.type || "application/octet-stream",
+        bucketName: action.uploadBucketName,
+      })
+    );
+
+    if (!presigned.ok) {
+      return presigned;
+    }
+
+    const presignedRoot =
+      presigned.data && typeof presigned.data === "object" ? (presigned.data as Record<string, unknown>) : null;
+    const presignedData =
+      presignedRoot?.data && typeof presignedRoot.data === "object"
+        ? (presignedRoot.data as PresignedUrlPayload)
+        : null;
+
+    if (!presignedData?.uploadUrl || !presignedData.fileKey) {
+      return {
+        ok: false,
+        status: 502,
+        durationMs: presigned.durationMs,
+        data: presigned.data,
+        error: "Storage service did not return a usable upload URL.",
+      };
+    }
+
+    const uploadStartedAt = performance.now();
+    const uploadResponse = await fetch(presignedData.uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": selectedFile.type || "application/octet-stream",
+      },
+      body: selectedFile,
+    });
+    const uploadDurationMs = Math.round(performance.now() - uploadStartedAt);
+
+    if (!uploadResponse.ok) {
+      return {
+        ok: false,
+        status: uploadResponse.status,
+        durationMs: presigned.durationMs + uploadDurationMs,
+        data: null,
+        error: "Direct upload failed before the file could be registered. Please retry after checking your connection.",
+      };
+    }
+
+    const finalizeBody = JSON.stringify({
+      ...parsedBody,
+      fileKey: presignedData.fileKey,
+      fileName: selectedFile.name,
+      fileType: selectedFile.type || "application/octet-stream",
+      bucketName: presignedData.bucketName,
+    });
+
+    const finalize = await sendJson(action.path, action.method, finalizeBody);
+    return {
+      ...finalize,
+      durationMs: presigned.durationMs + uploadDurationMs + finalize.durationMs,
+    };
+  }, [sendJson]);
+
   function downloadTemplate(action: ActionBlueprint): void {
     const template = CSV_TEMPLATES[action.id] || buildBodyTemplate(action);
     if (!template) {
@@ -862,6 +942,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
 
     let bodyText = bodyMap[action.id] || "";
     const isMultipart = action.transport === "multipart";
+    const isDirectUpload = action.transport === "direct-upload";
     const selectedFile = fileMap[action.id] || null;
     let parsedBody: Record<string, unknown> = {};
 
@@ -889,12 +970,12 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
       bodyText = Object.keys(parsedBody).length ? JSON.stringify(parsedBody) : "";
     }
 
-    if (isMultipart && !selectedFile) {
+    if ((isMultipart || isDirectUpload) && !selectedFile) {
       setActionState((prev) => ({
         ...prev,
         [action.id]: {
           loading: false,
-          error: "Please attach the required CSV file.",
+          error: isDirectUpload ? "Please attach the file you want to upload." : "Please attach the required CSV file.",
         },
       }));
       return;
@@ -908,9 +989,11 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
     }));
 
     try {
-      const result = isMultipart
-        ? await sendMultipart(action, selectedFile as File, parsedBody)
-        : await sendJson(action.path, action.method, bodyText);
+      const result = isDirectUpload
+        ? await sendDirectUpload(action, selectedFile as File, parsedBody)
+        : isMultipart
+          ? await sendMultipart(action, selectedFile as File, parsedBody)
+          : await sendJson(action.path, action.method, bodyText);
 
       setActionState((prev) => ({
         ...prev,
@@ -1469,20 +1552,24 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                   </>
                 ) : null}
 
-                {action.transport === "multipart" ? (
+                {action.transport === "multipart" || action.transport === "direct-upload" ? (
                   <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-3">
-                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">CSV Upload</p>
+                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">
+                      {action.transport === "direct-upload" ? "Direct File Upload" : "CSV Upload"}
+                    </p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => downloadTemplate(action)}
-                        className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-100"
-                      >
-                        Download Template CSV
-                      </button>
+                      {action.transport === "multipart" ? (
+                        <button
+                          type="button"
+                          onClick={() => downloadTemplate(action)}
+                          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-100"
+                        >
+                          Download Template CSV
+                        </button>
+                      ) : null}
                       <input
                         type="file"
-                        accept=".csv"
+                        accept={action.transport === "direct-upload" ? undefined : ".csv"}
                         onChange={(event) =>
                           setFileMap((prev) => ({
                             ...prev,
@@ -1493,7 +1580,11 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                       />
                     </div>
                     <p className="mt-2 text-xs text-zinc-500">
-                      {selectedFile ? `Selected: ${selectedFile.name}` : "No file selected."}
+                      {selectedFile
+                        ? `Selected: ${selectedFile.name}`
+                        : action.transport === "direct-upload"
+                          ? "No file selected for upload."
+                          : "No file selected."}
                     </p>
                   </div>
                 ) : null}

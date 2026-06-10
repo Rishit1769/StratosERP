@@ -16,8 +16,9 @@ export interface ActionBlueprint {
   method: HttpMethod;
   path: string;
   body?: Record<string, unknown>;
-  transport?: "json" | "multipart";
+  transport?: "json" | "multipart" | "direct-upload";
   fileFieldName?: string;
+  uploadBucketName?: string;
 }
 
 export interface RoleBlueprint {
@@ -457,11 +458,11 @@ export const roleBlueprints: RoleBlueprint[] = [
       {
         id: "si-upload-material",
         label: "Upload Study Material",
-        description: "Upload subject material as multipart form data.",
+        description: "Upload subject material directly to object storage with a presigned URL.",
         method: "POST",
         path: "/api/subject-incharge/materials",
-        transport: "multipart",
-        fileFieldName: "file",
+        transport: "direct-upload",
+        uploadBucketName: "study-materials",
         body: {
           subject_id: 1,
         },
