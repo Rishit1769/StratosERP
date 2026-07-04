@@ -6,7 +6,7 @@ import type { RoleSlug } from "@/lib/role-blueprints";
 
 const TOKEN_KEY = "stratos.jwtToken";
 const DEFAULT_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:5000";
-const ALLOWED_EMAIL_DOMAIN = "@tcetmumbai.in";
+const ALLOWED_EMAIL_DOMAINS = ["@tcetmumbai.in", "@stratos.erp"];
 
 const ROLE_TO_SLUG: Record<string, RoleSlug> = {
   Admin: "admin",
@@ -91,8 +91,8 @@ export default function AuthWorkbench() {
       return;
     }
 
-    if (!trimmedEmail.toLowerCase().endsWith(ALLOWED_EMAIL_DOMAIN)) {
-      setFeedback(`Only ${ALLOWED_EMAIL_DOMAIN} email addresses are allowed.`);
+    if (!ALLOWED_EMAIL_DOMAINS.some((domain) => trimmedEmail.toLowerCase().endsWith(domain))) {
+      setFeedback(`Only ${ALLOWED_EMAIL_DOMAINS.join(" or ")} email addresses are allowed.`);
       return;
     }
 
@@ -169,8 +169,7 @@ export default function AuthWorkbench() {
             className="mt-2 w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500 focus:bg-white"
             placeholder="admin@tcetmumbai.in"
             autoComplete="email"
-            pattern={"^[^\\s@]+@tcetmumbai\\.in$"}
-            title="Use your @tcetmumbai.in email"
+            title="Use your institutional email"
             required
           />
         </label>

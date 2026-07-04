@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Role, JwtPayload } from '../types';
 
-const ALLOWED_EMAIL_DOMAIN = '@tcetmumbai.in';
+const ALLOWED_EMAIL_DOMAINS = ['@stratos.erp', '@tcetmumbai.in'];
 
 const LEGACY_DESIGNATION_TO_ROLE: Record<string, Role> = {
   'Class Incharge': 'ClassIncharge',
@@ -12,7 +12,8 @@ const LEGACY_DESIGNATION_TO_ROLE: Record<string, Role> = {
 };
 
 function isAllowedDomainEmail(email: string): boolean {
-  return email.toLowerCase().endsWith(ALLOWED_EMAIL_DOMAIN);
+  const normalizedEmail = email.toLowerCase();
+  return ALLOWED_EMAIL_DOMAINS.some((domain) => normalizedEmail.endsWith(domain));
 }
 
 function uniqueRoles(roles: Array<Role | null | undefined>): Role[] {
