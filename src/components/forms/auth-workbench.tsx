@@ -18,6 +18,14 @@ const ROLE_TO_SLUG: Record<string, RoleSlug> = {
   Student: "student",
 };
 
+const ACCESS_POINTS = [
+  "Institution-wide configuration and term controls",
+  "Department operations, faculty deployment, and escalation",
+  "Role-based academic, practical, and student support workflows",
+] as const;
+
+const TRUST_MARKERS = ["Monochrome command surface", "Role-routed portals", "Institutional access only"] as const;
+
 type LoginApiResponse = {
   success?: boolean;
   message?: string;
@@ -155,48 +163,108 @@ export default function AuthWorkbench() {
   }
 
   return (
-    <section className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)] sm:p-8">
-      <p className="text-xs uppercase tracking-[0.24em] text-zinc-500">StratosERP</p>
-      <h1 className="mt-3 text-3xl font-semibold tracking-tight text-zinc-950 sm:text-4xl">Login</h1>
+    <main className="mono-shell">
+      <a href="#portal-access" className="mono-button-primary sr-only focus:not-sr-only focus:fixed focus:left-6 focus:top-6 focus:z-50">
+        Skip to portal access
+      </a>
+      <section className="mx-auto grid min-h-[100dvh] w-full max-w-[1280px] gap-12 px-6 py-10 lg:grid-cols-[1.2fr_0.8fr] lg:px-12 lg:py-14">
+        <div className="flex flex-col justify-between gap-10">
+          <div className="space-y-6">
+            <div className="flex items-center gap-4">
+              <span className="mono-kicker">Institutional Educational ERP</span>
+              <span aria-hidden="true" className="h-4 w-4 border border-[var(--border)]" />
+            </div>
 
-      <form onSubmit={handleSubmit} className="mt-6 grid gap-4">
-        <label className="block">
-          <span className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">Email</span>
-          <input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="mt-2 w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500 focus:bg-white"
-            placeholder="admin@tcetmumbai.in"
-            autoComplete="email"
-            title="Use your institutional email"
-            required
-          />
-        </label>
+            <div className="mono-rule-ultra pt-6">
+              <p className="mono-display">STRATOS</p>
+              <p className="mono-title mt-4 max-w-2xl text-4xl sm:text-5xl">A stark command surface for academic operations.</p>
+            </div>
 
-        <label className="block">
-          <span className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">Password</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="mt-2 w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500 focus:bg-white"
-            placeholder="Enter your password"
-            autoComplete="off"
-            required
-          />
-        </label>
+            <p className="mono-lead max-w-xl">
+              Move from launcher to role-specific control rooms with a monochrome system built for governance,
+              accountability, and institutional clarity.
+            </p>
+          </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="mt-1 w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-500"
-        >
-          {loading ? "Logging in..." : "Login"}
-        </button>
-      </form>
+          <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div className="mono-grid mono-card space-y-5">
+              <p className="mono-kicker">Access landscape</p>
+              <ul className="space-y-4">
+                {ACCESS_POINTS.map((item) => (
+                  <li key={item} className="grid grid-cols-[auto_1fr] gap-4">
+                    <span aria-hidden="true" className="mt-1 h-3 w-3 border border-[var(--border)]" />
+                    <span className="mono-body text-base text-[var(--foreground)]">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-      {feedback ? <p className="mt-4 rounded-xl bg-zinc-100 px-3 py-2 text-sm text-zinc-700">{feedback}</p> : null}
-    </section>
+            <div className="space-y-3 border-l border-[var(--border)] pl-6">
+              {TRUST_MARKERS.map((marker) => (
+                <p key={marker} className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                  {marker}
+                </p>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <section id="portal-access" className="mono-card mono-diagonal flex items-center">
+          <div className="w-full space-y-8 bg-[var(--background)] p-6 sm:p-8">
+            <div className="space-y-3">
+              <p className="mono-kicker">Portal access</p>
+              <div className="mono-rule pt-5">
+                <h1 className="mono-title text-4xl sm:text-5xl">Enter the authorised portal.</h1>
+              </div>
+              <p className="mono-body max-w-md">
+                Use an institutional address ending in {ALLOWED_EMAIL_DOMAINS.join(" or ")} to unlock the correct
+                dashboard route.
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="grid gap-6">
+              <label className="block">
+                <span className="mono-kicker">Email</span>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="mono-input mt-2"
+                  placeholder="admin@tcetmumbai.in"
+                  autoComplete="email"
+                  title="Use your institutional email"
+                  required
+                />
+              </label>
+
+              <label className="block">
+                <span className="mono-kicker">Password</span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="mono-input mt-2"
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  required
+                />
+              </label>
+
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <button type="submit" disabled={loading} className="mono-button-primary w-full sm:w-auto">
+                  {loading ? "Logging in" : "Access portal"}
+                  <span aria-hidden="true">→</span>
+                </button>
+                <p className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
+                  Role-aware redirect after sign-in
+                </p>
+              </div>
+            </form>
+
+            {feedback ? <p className="mono-feedback text-sm">{feedback}</p> : null}
+          </div>
+        </section>
+      </section>
+    </main>
   );
 }

@@ -182,22 +182,22 @@ function parseFieldValue(field: FieldSpec, rawValue: string): unknown {
 
 function renderPayloadData(payload: unknown): ReactNode {
   if (payload === null || payload === undefined) {
-    return <span className="text-zinc-500">No data returned.</span>;
+    return <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">No data returned.</span>;
   }
 
   if (typeof payload === "string" || typeof payload === "number" || typeof payload === "boolean") {
-    return <span className="text-zinc-800">{String(payload)}</span>;
+    return <span className="text-sm text-[var(--foreground)]">{String(payload)}</span>;
   }
 
   if (Array.isArray(payload)) {
     if (!payload.length) {
-      return <span className="text-zinc-500">No records found.</span>;
+      return <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">No records found.</span>;
     }
 
     return (
       <div className="space-y-2">
         {payload.map((item, index) => (
-          <div key={`payload-item-${index}`} className="rounded-xl border border-zinc-200 bg-white p-3">
+          <div key={`payload-item-${index}`} className="mono-card">
             {renderPayloadData(item)}
           </div>
         ))}
@@ -208,14 +208,14 @@ function renderPayloadData(payload: unknown): ReactNode {
   if (typeof payload === "object") {
     const entries = Object.entries(payload as Record<string, unknown>);
     if (!entries.length) {
-      return <span className="text-zinc-500">No fields available.</span>;
+      return <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">No fields available.</span>;
     }
 
     return (
       <div className="grid gap-2 md:grid-cols-2">
         {entries.map(([key, value]) => (
-          <div key={key} className="rounded-xl border border-zinc-200 bg-white p-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{toLabel(key)}</p>
+          <div key={key} className="mono-card">
+            <p className="mono-kicker">{toLabel(key)}</p>
             <div className="mt-1 text-sm">{renderPayloadData(value)}</div>
           </div>
         ))}
@@ -223,7 +223,7 @@ function renderPayloadData(payload: unknown): ReactNode {
     );
   }
 
-  return <span className="text-zinc-500">Unsupported response type.</span>;
+  return <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">Unsupported response type.</span>;
 }
 
 function escapeCsvCell(value: unknown): string {
@@ -1143,12 +1143,41 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
   }, [actionState]);
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[260px_1fr]">
-      <aside className="rounded-3xl border border-zinc-200 bg-white p-4 shadow-[0_20px_60px_rgba(15,23,42,0.08)] xl:sticky xl:top-5 xl:h-fit">
-        <p className="px-2 text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
-          {role.roleName} Functions
-        </p>
-        <div className="mt-3 space-y-2">
+    <div className="space-y-10">
+      <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+        <div className="mono-card space-y-6">
+          <div className="mono-rule-ultra pt-6">
+            <p className="mono-kicker">Role narrative</p>
+            <h2 className="mono-title mt-4 text-4xl sm:text-5xl">{role.roleName} as an editorial command room.</h2>
+          </div>
+          <p className="mono-lead max-w-2xl">{role.strapline}</p>
+          <div className="grid gap-3">
+            {role.checkpoints.map((checkpoint) => (
+              <div key={checkpoint} className="grid grid-cols-[auto_1fr] gap-3 border-t border-[var(--border-light)] pt-3 first:border-t-0 first:pt-0">
+                <span aria-hidden="true" className="mt-1 h-3 w-3 border border-[var(--border)]" />
+                <p className="mono-body text-[var(--foreground)]">{checkpoint}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mono-invert mono-invert-grid p-6 sm:p-8">
+          <div className="grid gap-6 sm:grid-cols-3">
+            {role.kpis.map((kpi) => (
+              <article key={kpi.label} className="border-b border-white/30 pb-5 sm:border-b-0 sm:border-l sm:pl-5 sm:first:border-l-0 sm:first:pl-0">
+                <p className="font-mono text-xs uppercase tracking-[0.16em] text-white/70">{kpi.label}</p>
+                <p className="mono-title mt-4 text-4xl text-white">{kpi.value}</p>
+                <p className="mt-2 text-sm leading-relaxed text-white/75">{kpi.hint}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-6 xl:grid-cols-[260px_1fr]">
+        <aside className="mono-card xl:sticky xl:top-5 xl:h-fit">
+          <p className="mono-kicker">{role.roleName} Functions</p>
+          <div className="mt-5 space-y-0">
           {sections.map((section) => {
             const selected = selectedSectionId === section.id;
             return (
@@ -1156,25 +1185,25 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                 key={section.id}
                 type="button"
                 onClick={() => setSelectedSectionId(section.id)}
-                className={`w-full rounded-xl px-3 py-3 text-left transition ${
-                  selected ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                }`}
+                data-selected={selected}
+                className="mono-sidebar-button"
               >
                 <p className="text-sm font-semibold">{section.title}</p>
-                <p className={`mt-1 text-xs ${selected ? "text-zinc-300" : "text-zinc-500"}`}>
+                <p className={`mt-1 text-xs ${selected ? "text-white/70" : "text-[var(--muted-foreground)]"}`}>
                   {section.detail}
                 </p>
               </button>
             );
           })}
         </div>
-      </aside>
+        </aside>
 
-      <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-[0_16px_45px_rgba(15,23,42,0.08)]">
+        <section className="mono-card">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-zinc-900">{selectedSection?.title || "Operations"}</h1>
-            <p className="mt-1 text-sm text-zinc-600">{selectedSection?.detail}</p>
+            <p className="mono-kicker">Current section</p>
+            <h1 className="mono-title mt-3 text-4xl">{selectedSection?.title || "Operations"}</h1>
+            <p className="mono-body mt-3 text-sm">{selectedSection?.detail}</p>
           </div>
           <label className="w-full max-w-md">
             <span className="sr-only">Search functionality</span>
@@ -1182,13 +1211,13 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search functionality"
-              className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500 focus:bg-white"
+              className="mono-input"
             />
           </label>
         </div>
 
         {!token ? (
-          <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="mono-feedback mt-6 text-sm">
             Please login from the launcher before using this workspace.
           </p>
         ) : null}
@@ -1287,14 +1316,14 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
               </button>
             </div>
             {analyticsBars.length > 0 ? (
-              <div className="mt-4 h-80 rounded-2xl border border-zinc-200 bg-white p-3">
+              <div className="mono-response mt-4 h-80 rounded-2xl border border-zinc-200 bg-white p-3">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={analyticsBars}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
                     <YAxis allowDecimals={false} />
                     <Tooltip />
-                    <Bar dataKey="value" fill="#111827" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="value" fill="var(--foreground)" radius={[0, 0, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -1632,7 +1661,8 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
             </p>
           ) : null}
         </div>
-      </section>
+        </section>
+      </div>
     </div>
   );
 }

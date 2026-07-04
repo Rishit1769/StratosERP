@@ -1,0 +1,49 @@
+- generic [active] [ref=f2e1]:
+  - main [ref=f2e2]:
+    - link "Skip to portal access" [ref=f2e3] [cursor=pointer]:
+      - /url: "#portal-access"
+    - generic [ref=f2e4]:
+      - generic [ref=f2e5]:
+        - generic [ref=f2e6]:
+          - generic [ref=f2e8]: Institutional Educational ERP
+          - generic [ref=f2e10]:
+            - paragraph [ref=f2e11]: STRATOS
+            - paragraph [ref=f2e12]: A stark command surface for academic operations.
+          - paragraph [ref=f2e13]: Move from launcher to role-specific control rooms with a monochrome system built for governance, accountability, and institutional clarity.
+        - generic [ref=f2e14]:
+          - generic [ref=f2e15]:
+            - paragraph [ref=f2e16]: Access landscape
+            - list [ref=f2e17]:
+              - listitem [ref=f2e18]:
+                - generic [ref=f2e20]: Institution-wide configuration and term controls
+              - listitem [ref=f2e21]:
+                - generic [ref=f2e23]: Department operations, faculty deployment, and escalation
+              - listitem [ref=f2e24]:
+                - generic [ref=f2e26]: Role-based academic, practical, and student support workflows
+          - generic [ref=f2e27]:
+            - paragraph [ref=f2e28]: Monochrome command surface
+            - paragraph [ref=f2e29]: Role-routed portals
+            - paragraph [ref=f2e30]: Institutional access only
+      - generic [ref=f2e32]:
+        - generic [ref=f2e33]:
+          - paragraph [ref=f2e34]: Portal access
+          - heading "Enter the authorised portal." [level=1] [ref=f2e36]
+          - paragraph [ref=f2e37]: Use an institutional address ending in @tcetmumbai.in or @stratos.erp to unlock the correct dashboard route.
+        - generic [ref=f2e38]:
+          - generic [ref=f2e39]:
+            - text: Email
+            - textbox "Email" [ref=f2e40]:
+              - /placeholder: admin@tcetmumbai.in
+              - text: admin@tcetmumbai.in
+          - generic [ref=f2e41]:
+            - text: Password
+            - textbox "Password" [ref=f2e42]:
+              - /placeholder: Enter your password
+          - generic [ref=f2e43]:
+            - button "Access portal" [ref=f2e44]:
+              - text: Access portal
+              - generic [ref=f2e45]: →
+            - paragraph [ref=f2e46]: Role-aware redirect after sign-in
+  - button "Open Next.js Dev Tools" [ref=f2e52] [cursor=pointer]:
+    - img [ref=f2e53]
+  - alert [ref=f2e56]

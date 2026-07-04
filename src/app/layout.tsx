@@ -1,20 +1,25 @@
 import type { Metadata } from "next";
-import { Chivo_Mono, Space_Grotesk } from "next/font/google";
+import { JetBrains_Mono, Playfair_Display, Source_Serif_4 } from "next/font/google";
 import "./globals.css";
 
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
+const playfairDisplay = Playfair_Display({
+  variable: "--font-playfair-display",
   subsets: ["latin"],
 });
 
-const chivoMono = Chivo_Mono({
-  variable: "--font-chivo-mono",
+const sourceSerif = Source_Serif_4({
+  variable: "--font-source-serif",
+  subsets: ["latin"],
+});
+
+const jetBrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "StratosERP Portal",
-  description: "Role-based portal for StratosERP modules.",
+  title: "StratosERP",
+  description: "Institutional editorial workspace for the StratosERP academic operations platform.",
 };
 
 export default function RootLayout({
@@ -25,13 +30,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${spaceGrotesk.variable} ${chivoMono.variable} h-full antialiased`}
+      className={`${playfairDisplay.variable} ${sourceSerif.variable} ${jetBrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-app-gradient text-zinc-900">
-        <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-          <div className="orb orb-one" />
-          <div className="orb orb-two" />
-        </div>
+      <body className="monochrome-theme min-h-full bg-background text-foreground">
         {children}
       </body>
     </html>
