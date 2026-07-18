@@ -24,7 +24,7 @@ const ACCESS_POINTS = [
   "Role-based academic, practical, and student support workflows",
 ] as const;
 
-const TRUST_MARKERS = ["Monochrome command surface", "Role-routed portals", "Institutional access only"] as const;
+const TRUST_MARKERS = ["Role-routed portals", "Institutional access only", "Shared dashboard language"] as const;
 
 type LoginApiResponse = {
   success?: boolean;
@@ -164,56 +164,70 @@ export default function AuthWorkbench() {
 
   return (
     <main className="mono-shell">
-      <a href="#portal-access" className="mono-button-primary sr-only focus:not-sr-only focus:fixed focus:left-6 focus:top-6 focus:z-50">
+      <a
+        href="#portal-access"
+        className="mono-button-primary sr-only focus:not-sr-only focus:fixed focus:left-6 focus:top-6 focus:z-50"
+      >
         Skip to portal access
       </a>
-      <section className="mx-auto grid min-h-[100dvh] w-full max-w-[1280px] gap-12 px-6 py-10 lg:grid-cols-[1.2fr_0.8fr] lg:px-12 lg:py-14">
-        <div className="flex flex-col justify-between gap-10">
-          <div className="space-y-6">
-            <div className="flex items-center gap-4">
-              <span className="mono-kicker">Institutional Educational ERP</span>
-              <span aria-hidden="true" className="h-4 w-4 border border-[var(--border)]" />
+      <section className="mx-auto grid min-h-[100dvh] w-full max-w-[1320px] gap-8 px-6 py-8 lg:grid-cols-[1.08fr_0.92fr] lg:px-12 lg:py-12">
+        <div className="flex flex-col justify-between gap-8">
+          <div className="space-y-8">
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="mono-kicker">Institutional educational ERP</span>
+              <span className="mono-pill">Live role routing</span>
             </div>
 
-            <div className="mono-rule-ultra pt-6">
+            <div className="mono-rule-ultra">
               <p className="mono-display">STRATOS</p>
-              <p className="mono-title mt-4 max-w-2xl text-4xl sm:text-5xl">A stark command surface for academic operations.</p>
+              <p className="mono-title mt-5 max-w-3xl text-4xl sm:text-5xl lg:text-6xl">
+                Academic operations with a cleaner command layer and calmer focus.
+              </p>
             </div>
 
-            <p className="mono-lead max-w-xl">
-              Move from launcher to role-specific control rooms with a monochrome system built for governance,
-              accountability, and institutional clarity.
+            <p className="mono-lead max-w-2xl">
+              Move from sign-in to the right control room for governance, academics, labs, notices, and student
+              support through a single role-aware experience.
             </p>
           </div>
 
-          <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div className="grid gap-6 lg:grid-cols-[1fr_0.92fr]">
             <div className="mono-grid mono-card space-y-5">
               <p className="mono-kicker">Access landscape</p>
               <ul className="space-y-4">
                 {ACCESS_POINTS.map((item) => (
                   <li key={item} className="grid grid-cols-[auto_1fr] gap-4">
-                    <span aria-hidden="true" className="mt-1 h-3 w-3 border border-[var(--border)]" />
+                    <span
+                      aria-hidden="true"
+                      className="mt-1 h-3 w-3 rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-secondary)]"
+                    />
                     <span className="mono-body text-base text-[var(--foreground)]">{item}</span>
                   </li>
                 ))}
               </ul>
             </div>
 
-            <div className="space-y-3 border-l border-[var(--border)] pl-6">
-              {TRUST_MARKERS.map((marker) => (
-                <p key={marker} className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">
-                  {marker}
-                </p>
-              ))}
+            <div className="mono-invert mono-invert-grid flex min-h-[280px] flex-col justify-between p-6">
+              <div className="space-y-3">
+                <p className="font-mono text-xs uppercase tracking-[0.16em] text-white/70">System posture</p>
+                <p className="mono-title text-3xl text-white">One shell. Seven roles. Shared visual language.</p>
+              </div>
+              <div className="space-y-3">
+                {TRUST_MARKERS.map((marker) => (
+                  <p key={marker} className="font-mono text-xs uppercase tracking-[0.16em] text-white/72">
+                    {marker}
+                  </p>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
-        <section id="portal-access" className="mono-card mono-diagonal flex items-center">
-          <div className="w-full space-y-8 bg-[var(--background)] p-6 sm:p-8">
+        <section id="portal-access" className="mono-card mono-diagonal flex items-center p-2">
+          <div className="w-full space-y-8 rounded-[1.35rem] bg-white/72 p-6 backdrop-blur sm:p-8">
             <div className="space-y-3">
               <p className="mono-kicker">Portal access</p>
-              <div className="mono-rule pt-5">
+              <div className="mono-rule">
                 <h1 className="mono-title text-4xl sm:text-5xl">Enter the authorised portal.</h1>
               </div>
               <p className="mono-body max-w-md">
