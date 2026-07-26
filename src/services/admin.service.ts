@@ -1,69 +1,68 @@
-import { prisma } from '@stratoserp/database';
-import bcrypt from 'bcryptjs';
-import { parse } from 'csv-parse/sync';
-import { SemesterType } from '../types';
+import bcrypt from "bcryptjs";
+import { parse } from "csv-parse/sync";
+import { db, parseJsonArray, run, selectOne, selectRows, withTransaction, type DbRow } from "@/lib/db";
+import { type SemesterType } from "../types";
 
-type AcademicYearBucket = '1st' | '2nd' | '3rd' | '4th';
+type AcademicYearBucket = "1st" | "2nd" | "3rd" | "4th";
 
-const YEAR_ORDER: AcademicYearBucket[] = ['1st', '2nd', '3rd', '4th'];
+const YEAR_ORDER: AcademicYearBucket[] = ["1st", "2nd", "3rd", "4th"];
 
 const ODD_SEM_BY_YEAR: Record<AcademicYearBucket, number> = {
-  '1st': 1,
-  '2nd': 3,
-  '3rd': 5,
-  '4th': 7,
+  "1st": 1,
+  "2nd": 3,
+  "3rd": 5,
+  "4th": 7,
 };
 
 const EVEN_SEM_BY_YEAR: Record<AcademicYearBucket, number> = {
-  '1st': 2,
-  '2nd': 4,
-  '3rd': 6,
-  '4th': 8,
+  "1st": 2,
+  "2nd": 4,
+  "3rd": 6,
+  "4th": 8,
 };
 
 const NEXT_YEAR: Partial<Record<AcademicYearBucket, AcademicYearBucket>> = {
-  '1st': '2nd',
-  '2nd': '3rd',
-  '3rd': '4th',
+  "1st": "2nd",
+  "2nd": "3rd",
+  "3rd": "4th",
+};
+
+type StudentRow = DbRow & {
+  uid: string;
+  email_id: string;
+  current_semester: number;
+  academic_year: string;
 };
 
 function isYearBack(academicYear: string, currentSemester: number): boolean {
-  if (academicYear === '1st') return ![1, 2].includes(currentSemester);
-  if (academicYear === '2nd') return ![3, 4].includes(currentSemester);
-  if (academicYear === '3rd') return ![5, 6].includes(currentSemester);
-  if (academicYear === '4th') return ![7, 8].includes(currentSemester);
+  if (academicYear === "1st") return ![1, 2].includes(currentSemester);
+  if (academicYear === "2nd") return ![3, 4].includes(currentSemester);
+  if (academicYear === "3rd") return ![5, 6].includes(currentSemester);
+  if (academicYear === "4th") return ![7, 8].includes(currentSemester);
   return false;
 }
 
-// ── Global Config ────────────────────────────────────────────
-
 export async function getGlobalConfig() {
-  return prisma.globalConfig.findFirst();
+  return selectOne(
+    db,
+    "SELECT config_id, active_semester_type, start_date, end_date FROM global_config ORDER BY config_id DESC LIMIT 1"
+  );
 }
 
-export async function setGlobalConfig(
-  semesterType: SemesterType,
-  startDate: string,
-  endDate: string
-) {
-  // Business Rule: only ONE active config row at a time
-  return prisma.$transaction(async (tx) => {
-    await tx.globalConfig.deleteMany();
-    const config = await tx.globalConfig.create({
-      data: {
-        activeSemesterType: semesterType,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-      },
-    });
-    return config.configId;
+export async function setGlobalConfig(semesterType: SemesterType, startDate: string, endDate: string) {
+  return withTransaction(async (connection) => {
+    await run(connection, "DELETE FROM global_config");
+    const result = await run(
+      connection,
+      "INSERT INTO global_config (active_semester_type, start_date, end_date) VALUES (?, ?, ?)",
+      [semesterType, startDate, endDate]
+    );
+    return result.insertId;
   });
 }
 
-// ── Bulk CSV Ingestion ────────────────────────────────────────
-
 export async function bulkIngestStudents(csvBuffer: Buffer): Promise<{ inserted: number; errors: string[] }> {
-  const records: any[] = parse(csvBuffer, { columns: true, skip_empty_lines: true, trim: true });
+  const records = parse(csvBuffer, { columns: true, skip_empty_lines: true, trim: true }) as Record<string, string>[];
   let inserted = 0;
   const errors: string[] = [];
   const UID_REGEX = /^\d{4}-[A-Z]{2,3}-[A-Z]-\d{2}-\d{4}$/;
@@ -74,140 +73,145 @@ export async function bulkIngestStudents(csvBuffer: Buffer): Promise<{ inserted:
       errors.push(`Invalid UID format: ${uid}`);
       continue;
     }
+
     try {
-      const hash = await bcrypt.hash(password || 'Welcome@123', 12);
-      await prisma.student.upsert({
-        where: { uid },
-        update: {},
-        create: {
-          uid,
-          emailId: email_id,
-          currentSemester: Number(current_semester),
-          academicYear: academic_year,
-          passwordHash: hash,
-        },
-      });
+      const hash = await bcrypt.hash(password || "Welcome@123", 12);
+      await db.execute(
+        `
+        INSERT INTO student (uid, email_id, current_semester, academic_year, password_hash)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE uid = uid
+        `,
+        [uid, email_id, Number(current_semester), academic_year, hash]
+      );
       inserted++;
-    } catch (err: any) {
-      errors.push(`Row ${uid}: ${err.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      errors.push(`Row ${uid}: ${message}`);
     }
   }
+
   return { inserted, errors };
 }
 
 export async function bulkIngestFaculty(csvBuffer: Buffer): Promise<{ inserted: number; errors: string[] }> {
-  const records: any[] = parse(csvBuffer, { columns: true, skip_empty_lines: true, trim: true });
+  const records = parse(csvBuffer, { columns: true, skip_empty_lines: true, trim: true }) as Record<string, string>[];
   let inserted = 0;
   const errors: string[] = [];
 
   for (const row of records) {
     const { name, email_id, designation_role, is_hod, password } = row;
+
     try {
-      const hash = await bcrypt.hash(password || 'Faculty@123', 12);
-      await prisma.faculty.upsert({
-        where: { emailId: email_id },
-        update: {},
-        create: {
-          name,
-          emailId: email_id,
-          designationRole: designation_role,
-          isHod: is_hod === 'true',
-          passwordHash: hash,
-        },
-      });
+      const hash = await bcrypt.hash(password || "Faculty@123", 12);
+      await db.execute(
+        `
+        INSERT INTO faculty (name, email_id, designation_role, is_hod, password_hash)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE email_id = email_id
+        `,
+        [name, email_id, designation_role, is_hod === "true" ? 1 : 0, hash]
+      );
       inserted++;
-    } catch (err: any) {
-      errors.push(`Row ${email_id}: ${err.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      errors.push(`Row ${email_id}: ${message}`);
     }
   }
+
   return { inserted, errors };
 }
 
 export async function bulkIngestSubjects(csvBuffer: Buffer): Promise<{ inserted: number; errors: string[] }> {
-  const records: any[] = parse(csvBuffer, { columns: true, skip_empty_lines: true, trim: true });
+  const records = parse(csvBuffer, { columns: true, skip_empty_lines: true, trim: true }) as Record<string, string>[];
   let inserted = 0;
   const errors: string[] = [];
 
   for (const row of records) {
     const { name, semester_level, has_lab, lab_marks_weight } = row;
+
     try {
-      await prisma.subject.create({
-        data: {
-          name,
-          semesterLevel: Number(semester_level),
-          hasLab: has_lab === 'true',
-          labMarksWeight: lab_marks_weight ? Number(lab_marks_weight) : null,
-        },
-      });
+      await db.execute(
+        "INSERT INTO subject (name, semester_level, has_lab, lab_marks_weight) VALUES (?, ?, ?, ?)",
+        [name, Number(semester_level), has_lab === "true" ? 1 : 0, lab_marks_weight ? Number(lab_marks_weight) : null]
+      );
       inserted++;
-    } catch (err: any) {
-      errors.push(`Row ${name}: ${err.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      errors.push(`Row ${name}: ${message}`);
     }
   }
+
   return { inserted, errors };
 }
 
 export async function bulkIngestTimetable(csvBuffer: Buffer): Promise<{ inserted: number; errors: string[] }> {
-  const records: any[] = parse(csvBuffer, { columns: true, skip_empty_lines: true, trim: true });
+  const records = parse(csvBuffer, { columns: true, skip_empty_lines: true, trim: true }) as Record<string, string>[];
   let inserted = 0;
   const errors: string[] = [];
 
   for (const row of records) {
     const { day_of_week, start_time, end_time, subject_id, faculty_id } = row;
+
     try {
-      await prisma.timetableSlot.create({
-        data: {
-          dayOfWeek: day_of_week,
-          startTime: new Date(`1970-01-01T${start_time}`),
-          endTime: new Date(`1970-01-01T${end_time}`),
-          subjectId: Number(subject_id),
-          facultyId: Number(faculty_id),
-        },
-      });
+      await db.execute(
+        "INSERT INTO timetable_slot (day_of_week, start_time, end_time, subject_id, faculty_id) VALUES (?, ?, ?, ?, ?)",
+        [day_of_week, start_time, end_time, Number(subject_id), Number(faculty_id)]
+      );
       inserted++;
-    } catch (err: any) {
-      errors.push(`Row: ${err.message}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      errors.push(`Row: ${message}`);
     }
   }
+
   return { inserted, errors };
 }
 
-// ── Batch Progression ─────────────────────────────────────────
-
 export async function triggerBatchProgression(): Promise<{ progressed: number; alumniTransitions: number }> {
-  return prisma.$transaction(async (tx) => {
-    // Find students with backlogs
-    const studentsWithBacklogs = await tx.studentSubjectRecord.findMany({
-      where: { status: { in: ['KT', 'SUPPLI'] } },
-      select: { studentUid: true },
-      distinct: ['studentUid'],
-    });
-    const blockedUids = new Set(studentsWithBacklogs.map(r => r.studentUid));
+  return withTransaction(async (connection) => {
+    const blockedRows = await selectRows<{ student_uid: string }>(
+      connection,
+      `
+      SELECT DISTINCT student_uid
+      FROM student_subject_record
+      WHERE status IN ('KT', 'SUPPLI')
+      `
+    );
+    const blockedUids = new Set(blockedRows.map((row) => row.student_uid));
 
-    const studentsToProgress = await tx.student.findMany({
-      where: {
-        academicYear: { not: 'Alumni' },
-        uid: { notIn: [...blockedUids] },
-      },
-    });
+    const students = await selectRows<StudentRow>(
+      connection,
+      `
+      SELECT uid, email_id, current_semester, academic_year
+      FROM student
+      WHERE academic_year <> 'Alumni'
+      ORDER BY uid ASC
+      `
+    );
 
     let progressed = 0;
     let alumniTransitions = 0;
 
-    for (const student of studentsToProgress) {
-      const newSemester = student.currentSemester + 1;
+    for (const student of students) {
+      if (blockedUids.has(student.uid)) continue;
+
+      const newSemester = student.current_semester + 1;
       if (newSemester > 8) {
-        await tx.student.update({
-          where: { uid: student.uid },
-          data: { academicYear: 'Alumni', currentSemester: 8 },
-        });
+        await run(
+          connection,
+          "UPDATE student SET academic_year = 'Alumni', current_semester = 8 WHERE uid = ?",
+          [student.uid]
+        );
         alumniTransitions++;
       } else {
-        const newYear = newSemester <= 2 ? '1st' : newSemester <= 4 ? '2nd' : newSemester <= 6 ? '3rd' : '4th';
-        await tx.student.update({
-          where: { uid: student.uid },
-          data: { currentSemester: newSemester, academicYear: newYear },
-        });
+        const newYear =
+          newSemester <= 2 ? "1st" : newSemester <= 4 ? "2nd" : newSemester <= 6 ? "3rd" : "4th";
+        await run(
+          connection,
+          "UPDATE student SET current_semester = ?, academic_year = ? WHERE uid = ?",
+          [newSemester, newYear, student.uid]
+        );
         progressed++;
       }
     }
@@ -218,33 +222,41 @@ export async function triggerBatchProgression(): Promise<{ progressed: number; a
 
 export async function getSemesterProgressionOverview() {
   const config = await getGlobalConfig();
-  const activeSemesterType = (config?.activeSemesterType as SemesterType) || 'ODD';
+  const activeSemesterType = (config?.active_semester_type as SemesterType) || "ODD";
 
-  const students = await prisma.student.findMany({
-    where: { academicYear: { in: ['1st', '2nd', '3rd', '4th'] } },
-    include: {
-      subjectRecords: {
-        where: { status: { in: ['KT', 'SUPPLI'] } },
-        select: { studentUid: true },
-      },
-    },
-  });
+  const students = await selectRows<StudentRow>(db, `
+    SELECT uid, email_id, current_semester, academic_year
+    FROM student
+    WHERE academic_year IN ('1st', '2nd', '3rd', '4th')
+  `);
+
+  const backlogRows = await selectRows<{ student_uid: string; backlog_count: number }>(
+    db,
+    `
+    SELECT student_uid, COUNT(*) AS backlog_count
+    FROM student_subject_record
+    WHERE status IN ('KT', 'SUPPLI')
+    GROUP BY student_uid
+    `
+  );
+
+  const backlogMap = new Map(backlogRows.map((row) => [row.student_uid, row.backlog_count]));
 
   const years = YEAR_ORDER.map((year) => {
     const oddSemester = ODD_SEM_BY_YEAR[year];
     const evenSemester = EVEN_SEM_BY_YEAR[year];
 
-    const yearStudents = students.filter(s => s.academicYear === year);
-    const oddStudents = yearStudents.filter(s => s.currentSemester === oddSemester);
-    const evenStudents = yearStudents.filter(s => s.currentSemester === evenSemester);
+    const yearStudents = students.filter((student) => student.academic_year === year);
+    const oddStudents = yearStudents.filter((student) => student.current_semester === oddSemester);
+    const evenStudents = yearStudents.filter((student) => student.current_semester === evenSemester);
 
-    const oddBlocked = oddStudents.filter(s => s.subjectRecords.length > 0).length;
-    const evenBlocked = evenStudents.filter(s => s.subjectRecords.length > 0).length;
-    const yearBackCount = yearStudents.filter(s => isYearBack(s.academicYear, s.currentSemester)).length;
+    const oddBlocked = oddStudents.filter((student) => (backlogMap.get(student.uid) ?? 0) > 0).length;
+    const evenBlocked = evenStudents.filter((student) => (backlogMap.get(student.uid) ?? 0) > 0).length;
+    const yearBackCount = yearStudents.filter((student) => isYearBack(student.academic_year, student.current_semester)).length;
 
-    let nextActionLabel = 'Promote to Even Semester';
-    if (activeSemesterType === 'EVEN') {
-      nextActionLabel = year === '4th' ? 'Move to Alumni' : 'Promote to Next Year';
+    let nextActionLabel = "Promote to Even Semester";
+    if (activeSemesterType === "EVEN") {
+      nextActionLabel = year === "4th" ? "Move to Alumni" : "Promote to Next Year";
     }
 
     return {
@@ -275,44 +287,52 @@ export async function promoteAcademicYear(
   blockedSkipped: number;
   yearBackSkipped: number;
 }> {
-  const targetedSemester = semesterType === 'ODD'
-    ? ODD_SEM_BY_YEAR[academicYear]
-    : EVEN_SEM_BY_YEAR[academicYear];
+  const targetedSemester = semesterType === "ODD" ? ODD_SEM_BY_YEAR[academicYear] : EVEN_SEM_BY_YEAR[academicYear];
 
-  return prisma.$transaction(async (tx) => {
-    const targetStudents = await tx.student.findMany({
-      where: { academicYear, NOT: { academicYear: 'Alumni' } },
-      include: {
-        subjectRecords: {
-          where: { status: { in: ['KT', 'SUPPLI'] } },
-          select: { studentUid: true },
-        },
-      },
-    });
+  return withTransaction(async (connection) => {
+    const targetStudents = await selectRows<StudentRow>(
+      connection,
+      `
+      SELECT uid, email_id, current_semester, academic_year
+      FROM student
+      WHERE academic_year = ? AND academic_year <> 'Alumni'
+      ORDER BY uid ASC
+      `,
+      [academicYear]
+    );
 
-    const inTargetSemester = targetStudents.filter(s => s.currentSemester === targetedSemester);
-    const blockedSkipped = inTargetSemester.filter(s => s.subjectRecords.length > 0).length;
-    const eligible = inTargetSemester.filter(s => s.subjectRecords.length === 0);
-    const yearBackSkipped = targetStudents.filter(s => s.currentSemester !== targetedSemester).length;
+    const backlogRows = await selectRows<{ student_uid: string; backlog_count: number }>(
+      connection,
+      `
+      SELECT student_uid, COUNT(*) AS backlog_count
+      FROM student_subject_record
+      WHERE student_uid IN (${targetStudents.map(() => "?").join(",") || "''"})
+        AND status IN ('KT', 'SUPPLI')
+      GROUP BY student_uid
+      `,
+      targetStudents.map((student) => student.uid)
+    );
+    const backlogMap = new Map(backlogRows.map((row) => [row.student_uid, row.backlog_count]));
+
+    const inTargetSemester = targetStudents.filter((student) => student.current_semester === targetedSemester);
+    const blockedSkipped = inTargetSemester.filter((student) => (backlogMap.get(student.uid) ?? 0) > 0).length;
+    const eligible = inTargetSemester.filter((student) => (backlogMap.get(student.uid) ?? 0) === 0);
+    const yearBackSkipped = targetStudents.filter((student) => student.current_semester !== targetedSemester).length;
 
     let progressed = 0;
     let alumniTransitions = 0;
 
     for (const student of eligible) {
-      if (semesterType === 'ODD') {
-        await tx.student.update({
-          where: { uid: student.uid },
-          data: { currentSemester: student.currentSemester + 1 },
-        });
+      if (semesterType === "ODD") {
+        await run(connection, "UPDATE student SET current_semester = current_semester + 1 WHERE uid = ?", [student.uid]);
         progressed++;
         continue;
       }
 
-      if (student.currentSemester === 8) {
-        await tx.student.update({
-          where: { uid: student.uid },
-          data: { academicYear: 'Alumni', currentSemester: 8 },
-        });
+      if (student.current_semester === 8) {
+        await run(connection, "UPDATE student SET academic_year = 'Alumni', current_semester = 8 WHERE uid = ?", [
+          student.uid,
+        ]);
         alumniTransitions++;
         continue;
       }
@@ -320,10 +340,11 @@ export async function promoteAcademicYear(
       const nextYear = NEXT_YEAR[academicYear];
       if (!nextYear) continue;
 
-      await tx.student.update({
-        where: { uid: student.uid },
-        data: { currentSemester: student.currentSemester + 1, academicYear: nextYear },
-      });
+      await run(
+        connection,
+        "UPDATE student SET current_semester = current_semester + 1, academic_year = ? WHERE uid = ?",
+        [nextYear, student.uid]
+      );
       progressed++;
     }
 
@@ -339,20 +360,23 @@ export async function promoteAcademicYear(
   });
 }
 
-// ── Exam Seating Matrix ───────────────────────────────────────
-
 export interface ClassroomCapacity {
   room: string;
   capacity: number;
 }
 
-export async function generateExamSeating(classrooms: ClassroomCapacity[]): Promise<any[]> {
-  const students = await prisma.student.findMany({
-    where: { academicYear: { not: 'Alumni' } },
-    orderBy: [{ currentSemester: 'asc' }, { uid: 'asc' }],
-  });
+export async function generateExamSeating(classrooms: ClassroomCapacity[]): Promise<Record<string, unknown>[]> {
+  const students = await selectRows<StudentRow>(
+    db,
+    `
+    SELECT uid, email_id, current_semester, academic_year
+    FROM student
+    WHERE academic_year <> 'Alumni'
+    ORDER BY current_semester ASC, uid ASC
+    `
+  );
 
-  const seating: any[] = [];
+  const seating: Record<string, unknown>[] = [];
   let studentIdx = 0;
 
   for (const room of classrooms) {
@@ -362,123 +386,144 @@ export async function generateExamSeating(classrooms: ClassroomCapacity[]): Prom
         room: room.room,
         seat_number: seat + 1,
         student_uid: roomStudents[seat].uid,
-        semester: roomStudents[seat].currentSemester,
+        semester: roomStudents[seat].current_semester,
       });
     }
     studentIdx += room.capacity;
     if (studentIdx >= students.length) break;
   }
+
   return seating;
 }
 
-// ── Invigilation Matrix ───────────────────────────────────────
+export async function generateInvigilationMatrix(examDate: string): Promise<Record<string, unknown>[]> {
+  const faculty = await selectRows<{ faculty_id: number; name: string }>(
+    db,
+    `
+    SELECT f.faculty_id, f.name
+    FROM faculty f
+    LEFT JOIN leave_substitution l
+      ON l.absent_faculty_id = f.faculty_id AND l.leave_date = ?
+    WHERE l.leave_id IS NULL
+    ORDER BY f.faculty_id ASC
+    `,
+    [examDate]
+  );
 
-export async function generateInvigilationMatrix(examDate: string): Promise<any[]> {
-  const faculty = await prisma.faculty.findMany({
-    where: {
-      leaveAbsences: {
-        none: { leaveDate: new Date(examDate) },
-      },
-    },
-    orderBy: { facultyId: 'asc' },
-  });
-
-  return faculty.map((f, idx) => ({
-    faculty_id: f.facultyId,
-    name: f.name,
-    duty_slot: `Slot ${(idx % 3) + 1}`,
+  return faculty.map((row, index) => ({
+    faculty_id: row.faculty_id,
+    name: row.name,
+    duty_slot: `Slot ${(index % 3) + 1}`,
     exam_date: examDate,
   }));
 }
 
-// ── Analytics ────────────────────────────────────────────────
-
 export async function getMacroAnalytics() {
-  const [totalStudents, totalFaculty, totalSubjects, ktCount, suppliCount, alumniCount, config] =
-    await Promise.all([
-      prisma.student.count(),
-      prisma.faculty.count(),
-      prisma.subject.count(),
-      prisma.studentSubjectRecord.count({ where: { status: 'KT' } }),
-      prisma.studentSubjectRecord.count({ where: { status: 'SUPPLI' } }),
-      prisma.student.count({ where: { academicYear: 'Alumni' } }),
-      getGlobalConfig(),
-    ]);
+  const [totalStudents, totalFaculty, totalSubjects, ktCount, suppliCount, alumniCount, config] = await Promise.all([
+    selectOne<{ total: number }>(db, "SELECT COUNT(*) AS total FROM student"),
+    selectOne<{ total: number }>(db, "SELECT COUNT(*) AS total FROM faculty"),
+    selectOne<{ total: number }>(db, "SELECT COUNT(*) AS total FROM subject"),
+    selectOne<{ total: number }>(db, "SELECT COUNT(*) AS total FROM student_subject_record WHERE status = 'KT'"),
+    selectOne<{ total: number }>(db, "SELECT COUNT(*) AS total FROM student_subject_record WHERE status = 'SUPPLI'"),
+    selectOne<{ total: number }>(db, "SELECT COUNT(*) AS total FROM student WHERE academic_year = 'Alumni'"),
+    getGlobalConfig(),
+  ]);
 
   return {
-    total_students: totalStudents,
-    total_faculty: totalFaculty,
-    total_subjects: totalSubjects,
-    kt_records: ktCount,
-    suppli_records: suppliCount,
-    alumni_count: alumniCount,
+    total_students: totalStudents?.total ?? 0,
+    total_faculty: totalFaculty?.total ?? 0,
+    total_subjects: totalSubjects?.total ?? 0,
+    kt_records: ktCount?.total ?? 0,
+    suppli_records: suppliCount?.total ?? 0,
+    alumni_count: alumniCount?.total ?? 0,
     global_config: config,
   };
 }
 
-// ── Faculty & Student Management ─────────────────────────────
-
 export async function createFaculty(data: {
-  name: string; email_id: string; designation_role: string; is_hod?: boolean; password: string;
+  name: string;
+  email_id: string;
+  designation_role: string;
+  is_hod?: boolean;
+  password: string;
 }) {
   const hash = await bcrypt.hash(data.password, 12);
-  const faculty = await prisma.faculty.create({
-    data: {
-      name: data.name,
-      emailId: data.email_id,
-      designationRole: data.designation_role,
-      isHod: data.is_hod ?? false,
-      passwordHash: hash,
-    },
-  });
-  return faculty.facultyId;
+  const result = await run(
+    db,
+    `
+    INSERT INTO faculty (name, email_id, designation_role, is_hod, password_hash)
+    VALUES (?, ?, ?, ?, ?)
+    `,
+    [data.name, data.email_id, data.designation_role, data.is_hod ? 1 : 0, hash]
+  );
+  return result.insertId;
 }
 
 export async function listAllFaculty() {
-  return prisma.faculty.findMany({
-    select: { facultyId: true, name: true, emailId: true, designationRole: true, isHod: true },
-  });
+  return selectRows(
+    db,
+    `
+    SELECT faculty_id AS facultyId, name, email_id AS emailId, designation_role AS designationRole, is_hod AS isHod
+    FROM faculty
+    ORDER BY faculty_id ASC
+    `
+  );
 }
 
 export async function listAllStudents(page = 1, limit = 50) {
+  const offset = (page - 1) * limit;
   const [students, total] = await Promise.all([
-    prisma.student.findMany({
-      select: { uid: true, emailId: true, currentSemester: true, academicYear: true },
-      orderBy: { uid: 'asc' },
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-    prisma.student.count(),
+    selectRows(
+      db,
+      `
+      SELECT uid, email_id AS emailId, current_semester AS currentSemester, academic_year AS academicYear
+      FROM student
+      ORDER BY uid ASC
+      LIMIT ? OFFSET ?
+      `,
+      [limit, offset]
+    ),
+    selectOne<{ total: number }>(db, "SELECT COUNT(*) AS total FROM student"),
   ]);
-  return { students, total, page, limit };
+
+  return { students, total: total?.total ?? 0, page, limit };
 }
 
 export async function getAlumniRecords() {
-  return prisma.student.findMany({
-    where: { academicYear: 'Alumni' },
-    select: { uid: true, emailId: true, academicYear: true },
-    orderBy: { uid: 'asc' },
-  });
+  return selectRows(
+    db,
+    `
+    SELECT uid, email_id AS emailId, academic_year AS academicYear
+    FROM student
+    WHERE academic_year = 'Alumni'
+    ORDER BY uid ASC
+    `
+  );
 }
 
-// ── Notice Board ─────────────────────────────────────────────
-
-export async function createNotice(data: {
-  title: string; target_audience: string; ai_filter_tags?: string[];
-}) {
-  const notice = await prisma.noticeBoard.create({
-    data: {
-      title: data.title,
-      targetAudience: data.target_audience,
-      aiFilterTags: data.ai_filter_tags || [],
-    },
-  });
-  return notice.noticeId;
+export async function createNotice(data: { title: string; target_audience: string; ai_filter_tags?: string[] }) {
+  const result = await run(
+    db,
+    "INSERT INTO notice_board (title, target_audience, ai_filter_tags) VALUES (?, ?, ?)",
+    [data.title, data.target_audience, JSON.stringify(data.ai_filter_tags || [])]
+  );
+  return result.insertId;
 }
 
 export async function listNotices(audience?: string) {
-  return prisma.noticeBoard.findMany({
-    where: audience ? { targetAudience: audience } : undefined,
-    orderBy: { createdAt: 'desc' },
-  });
+  const rows = await selectRows<DbRow>(
+    db,
+    `
+    SELECT notice_id, title, target_audience, ai_filter_tags, created_at
+    FROM notice_board
+    ${audience ? "WHERE target_audience = ?" : ""}
+    ORDER BY created_at DESC
+    `,
+    audience ? [audience] : []
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    ai_filter_tags: parseJsonArray(row.ai_filter_tags),
+  }));
 }

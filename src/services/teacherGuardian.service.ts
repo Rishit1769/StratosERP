@@ -1,119 +1,168 @@
-import { prisma } from '@stratoserp/database';
-
-// ── Mentee Management ─────────────────────────────────────────
+import { db, parseJsonArray, run, selectOne, selectRows, type DbRow } from "@/lib/db";
 
 export async function getMentees(tgFacultyId: number) {
-  const assignments = await prisma.tgAssignment.findMany({
-    where: { facultyId: tgFacultyId },
-    include: {
-      student: {
-        include: {
-          subjectRecords: {
-            where: { status: { in: ['KT', 'SUPPLI'] } },
-          },
-        },
-      },
-    },
-    orderBy: { student: { uid: 'asc' } },
-  });
-
-  return assignments.map(a => ({
-    uid: a.student.uid,
-    email_id: a.student.emailId,
-    current_semester: a.student.currentSemester,
-    academic_year: a.student.academicYear,
-    backlogs: a.student.subjectRecords.length,
-  }));
+  return selectRows(
+    db,
+    `
+    SELECT
+      s.uid,
+      s.email_id,
+      s.current_semester,
+      s.academic_year,
+      COALESCE(SUM(CASE WHEN ssr.status IN ('KT', 'SUPPLI') THEN 1 ELSE 0 END), 0) AS backlogs
+    FROM tg_assignment tga
+    JOIN student s ON s.uid = tga.student_uid
+    LEFT JOIN student_subject_record ssr ON ssr.student_uid = s.uid
+    WHERE tga.faculty_id = ?
+    GROUP BY s.uid, s.email_id, s.current_semester, s.academic_year
+    ORDER BY s.uid ASC
+    `,
+    [tgFacultyId]
+  );
 }
 
 export async function getMenteePortfolio(tgFacultyId: number, studentUid: string) {
-  const assignment = await prisma.tgAssignment.findFirst({
-    where: { facultyId: tgFacultyId, studentUid },
-  });
-  if (!assignment) throw new Error('Student not in your mentee group.');
+  const assignment = await selectOne(
+    db,
+    "SELECT assignment_id FROM tg_assignment WHERE faculty_id = ? AND student_uid = ? LIMIT 1",
+    [tgFacultyId, studentUid]
+  );
+  if (!assignment) throw new Error("Student not in your mentee group.");
 
-  const student = await prisma.student.findUnique({ where: { uid: studentUid } });
+  const student = await selectOne<DbRow>(
+    db,
+    "SELECT uid, email_id, current_semester, academic_year FROM student WHERE uid = ? LIMIT 1",
+    [studentUid]
+  );
 
-  const subjects = await prisma.studentSubjectRecord.findMany({
-    where: { studentUid },
-    include: { subject: true },
-  });
+  const subjects = await selectRows<DbRow>(
+    db,
+    `
+    SELECT sub.name, sub.semester_level, ssr.marks, ssr.status
+    FROM student_subject_record ssr
+    JOIN subject sub ON sub.subject_id = ssr.subject_id
+    WHERE ssr.student_uid = ?
+    ORDER BY sub.semester_level ASC, sub.name ASC
+    `,
+    [studentUid]
+  );
 
-  const aictePoints = await prisma.aictePoints.findMany({
-    where: { studentUid },
-    orderBy: { awardedAt: 'desc' },
-  });
+  const aictePoints = await selectRows(
+    db,
+    `
+    SELECT record_id, student_uid, activity, points, awarded_by, awarded_at
+    FROM aicte_points
+    WHERE student_uid = ?
+    ORDER BY awarded_at DESC
+    `,
+    [studentUid]
+  );
 
-  const grievances = await prisma.grievanceTicket.findMany({
-    where: { studentUid },
-    orderBy: { createdAt: 'desc' },
-  });
+  const grievances = await selectRows(
+    db,
+    `
+    SELECT ticket_id, student_uid, category, description, evidence, status, assigned_authority_id, created_at, updated_at
+    FROM grievance_ticket
+    WHERE student_uid = ?
+    ORDER BY created_at DESC
+    `,
+    [studentUid]
+  );
 
   return {
     student,
-    subjects: subjects.map(s => ({
-      name: s.subject.name,
-      semester_level: s.subject.semesterLevel,
-      marks: s.marks,
-      status: s.status,
+    subjects: subjects.map((subject) => ({
+      name: subject.name,
+      semester_level: subject.semester_level,
+      marks: subject.marks,
+      status: subject.status,
     })),
     aicte_points: aictePoints,
     grievances,
   };
 }
 
-// ── AICTE Points ──────────────────────────────────────────────
-
 export async function awardAICTEPoints(data: {
-  student_uid: string; activity: string; points: number; faculty_id: number;
+  student_uid: string;
+  activity: string;
+  points: number;
+  faculty_id: number;
 }) {
-  const record = await prisma.aictePoints.create({
-    data: {
-      studentUid: data.student_uid,
-      activity: data.activity,
-      points: data.points,
-      awardedBy: data.faculty_id,
-    },
-  });
-  return record.recordId;
+  const result = await run(
+    db,
+    "INSERT INTO aicte_points (student_uid, activity, points, awarded_by) VALUES (?, ?, ?, ?)",
+    [data.student_uid, data.activity, data.points, data.faculty_id]
+  );
+  return result.insertId;
 }
 
 export async function getAICTEPoints(studentUid: string) {
-  const records = await prisma.aictePoints.findMany({
-    where: { studentUid },
-    orderBy: { awardedAt: 'desc' },
-  });
+  const records = await selectRows(
+    db,
+    `
+    SELECT record_id, student_uid, activity, points, awarded_by, awarded_at
+    FROM aicte_points
+    WHERE student_uid = ?
+    ORDER BY awarded_at DESC
+    `,
+    [studentUid]
+  );
 
-  const total = records.reduce((sum, r) => sum + r.points, 0);
+  const total = records.reduce((sum, record) => sum + Number(record.points), 0);
   return { records, total_points: total };
 }
 
-// ── Grievance Resolution ──────────────────────────────────────
-
 export async function getAssignedGrievances(facultyId: number) {
-  return prisma.grievanceTicket.findMany({
-    where: { assignedAuthorityId: facultyId, status: 'Open' },
-    include: { student: { select: { emailId: true } } },
-    orderBy: { createdAt: 'desc' },
-  });
+  return selectRows(
+    db,
+    `
+    SELECT
+      g.ticket_id,
+      g.student_uid,
+      g.category,
+      g.description,
+      g.evidence,
+      g.status,
+      g.assigned_authority_id,
+      g.created_at,
+      g.updated_at,
+      s.email_id
+    FROM grievance_ticket g
+    JOIN student s ON s.uid = g.student_uid
+    WHERE g.assigned_authority_id = ?
+      AND g.status = 'Open'
+    ORDER BY g.created_at DESC
+    `,
+    [facultyId]
+  );
 }
 
 export async function resolveGrievance(ticketId: number, facultyId: number) {
-  const ticket = await prisma.grievanceTicket.findUnique({ where: { ticketId } });
-  if (!ticket) throw new Error('Ticket not found.');
-  if (ticket.assignedAuthorityId !== facultyId) throw new Error('Not authorized for this ticket.');
+  const ticket = await selectOne<{ assigned_authority_id: number | null }>(
+    db,
+    "SELECT assigned_authority_id FROM grievance_ticket WHERE ticket_id = ? LIMIT 1",
+    [ticketId]
+  );
 
-  await prisma.grievanceTicket.update({
-    where: { ticketId },
-    data: { status: 'Resolved' },
-  });
+  if (!ticket) throw new Error("Ticket not found.");
+  if (ticket.assigned_authority_id !== facultyId) throw new Error("Not authorized for this ticket.");
+
+  await run(db, "UPDATE grievance_ticket SET status = 'Resolved' WHERE ticket_id = ?", [ticketId]);
 }
 
-// ── Notices ───────────────────────────────────────────────────
-
 export async function getRelevantNotices() {
-  return prisma.noticeBoard.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 15,
-  });
+  const rows = await selectRows<DbRow>(
+    db,
+    `
+    SELECT notice_id, title, target_audience, ai_filter_tags, created_at
+    FROM notice_board
+    ORDER BY created_at DESC
+    LIMIT 15
+    `
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    ai_filter_tags: parseJsonArray(row.ai_filter_tags),
+  }));
 }

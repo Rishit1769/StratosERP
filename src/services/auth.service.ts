@@ -1,14 +1,38 @@
-import { prisma } from '@stratoserp/database';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { Role, JwtPayload } from '../types';
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { db, selectOne } from "@/lib/db";
+import { type JwtPayload, type Role } from "../types";
 
-const ALLOWED_EMAIL_DOMAINS = ['@stratos.erp', '@tcetmumbai.in'];
+const ALLOWED_EMAIL_DOMAINS = ["@stratos.erp", "@tcetmumbai.in"];
 
 const LEGACY_DESIGNATION_TO_ROLE: Record<string, Role> = {
-  'Class Incharge': 'ClassIncharge',
-  'Subject Incharge': 'SubjectIncharge',
-  TG: 'TG',
+  "Class Incharge": "ClassIncharge",
+  "Subject Incharge": "SubjectIncharge",
+  TG: "TG",
+};
+
+type AdminRow = {
+  admin_id: number;
+  name: string;
+  email_id: string;
+  password_hash: string;
+};
+
+type FacultyRow = {
+  faculty_id: number;
+  name: string;
+  email_id: string;
+  designation_role: string;
+  password_hash: string;
+  is_hod: number;
+};
+
+type StudentRow = {
+  uid: string;
+  email_id: string;
+  current_semester: number;
+  academic_year: string;
+  password_hash: string;
 };
 
 function isAllowedDomainEmail(email: string): boolean {
@@ -33,61 +57,66 @@ function buildJwtPayload(id: number | string, email: string, designations: Role[
   };
 }
 
-async function resolveFacultyDesignations(faculty: {
-  facultyId: number;
-  emailId: string;
-  designationRole: string;
-  isHod: boolean;
-}): Promise<Role[]> {
+async function resolveFacultyDesignations(faculty: FacultyRow): Promise<Role[]> {
   const [tgAssignments, subjectAssignments, practicalBatches, practicalSessions] = await Promise.all([
-    prisma.tgAssignment.count({ where: { facultyId: faculty.facultyId } }),
-    prisma.timetableSlot.count({ where: { facultyId: faculty.facultyId } }),
-    prisma.labBatch.count({ where: { facultyId: faculty.facultyId } }),
-    prisma.labSession.count({ where: { assignedFacultyId: faculty.facultyId } }),
+    selectOne<{ total: number }>(db, "SELECT COUNT(*) AS total FROM tg_assignment WHERE faculty_id = ?", [
+      faculty.faculty_id,
+    ]),
+    selectOne<{ total: number }>(db, "SELECT COUNT(*) AS total FROM timetable_slot WHERE faculty_id = ?", [
+      faculty.faculty_id,
+    ]),
+    selectOne<{ total: number }>(db, "SELECT COUNT(*) AS total FROM lab_batch WHERE faculty_id = ?", [
+      faculty.faculty_id,
+    ]),
+    selectOne<{ total: number }>(db, "SELECT COUNT(*) AS total FROM lab_session WHERE assigned_faculty_id = ?", [
+      faculty.faculty_id,
+    ]),
   ]);
 
   const designations = uniqueRoles([
-    faculty.isHod ? 'HOD' : null,
-    LEGACY_DESIGNATION_TO_ROLE[faculty.designationRole] ?? null,
-    tgAssignments > 0 ? 'TG' : null,
-    subjectAssignments > 0 ? 'SubjectIncharge' : null,
-    practicalBatches > 0 || practicalSessions > 0 ? 'PracticalTeacher' : null,
+    faculty.is_hod ? "HOD" : null,
+    LEGACY_DESIGNATION_TO_ROLE[faculty.designation_role] ?? null,
+    (tgAssignments?.total ?? 0) > 0 ? "TG" : null,
+    (subjectAssignments?.total ?? 0) > 0 ? "SubjectIncharge" : null,
+    (practicalBatches?.total ?? 0) > 0 || (practicalSessions?.total ?? 0) > 0 ? "PracticalTeacher" : null,
   ]);
 
   if (designations.length > 0) {
     return designations;
   }
 
-  return [LEGACY_DESIGNATION_TO_ROLE[faculty.designationRole] ?? 'SubjectIncharge'];
+  return [LEGACY_DESIGNATION_TO_ROLE[faculty.designation_role] ?? "SubjectIncharge"];
 }
 
 export async function loginAdmin(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!isAllowedDomainEmail(normalizedEmail)) return null;
 
-  const admin = await prisma.adminUser.findUnique({
-    where: { emailId: normalizedEmail },
-  });
+  const admin = await selectOne<AdminRow>(
+    db,
+    "SELECT admin_id, name, email_id, password_hash FROM admin_user WHERE email_id = ? LIMIT 1",
+    [normalizedEmail]
+  );
   if (!admin) return null;
 
-  const valid = await bcrypt.compare(password, admin.passwordHash);
+  const valid = await bcrypt.compare(password, admin.password_hash);
   if (!valid) return null;
 
-  const designations: Role[] = ['Admin'];
-  const payload = buildJwtPayload(admin.adminId, admin.emailId, designations);
+  const designations: Role[] = ["Admin"];
+  const payload = buildJwtPayload(admin.admin_id, admin.email_id, designations);
   const token = jwt.sign(payload, process.env.JWT_SECRET as string, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+    expiresIn: process.env.JWT_EXPIRES_IN || "24h",
   } as jwt.SignOptions);
 
   return {
     token,
     admin: {
-      id: admin.adminId,
+      id: admin.admin_id,
       name: admin.name,
-      email: admin.emailId,
+      email: admin.email_id,
       primaryRole: payload.primaryRole,
       designations,
-      role: 'Admin',
+      role: "Admin",
     },
   };
 }
@@ -96,26 +125,28 @@ export async function loginFaculty(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!isAllowedDomainEmail(normalizedEmail)) return null;
 
-  const faculty = await prisma.faculty.findUnique({
-    where: { emailId: normalizedEmail },
-  });
+  const faculty = await selectOne<FacultyRow>(
+    db,
+    "SELECT faculty_id, name, email_id, designation_role, password_hash, is_hod FROM faculty WHERE email_id = ? LIMIT 1",
+    [normalizedEmail]
+  );
   if (!faculty) return null;
 
-  const valid = await bcrypt.compare(password, faculty.passwordHash);
+  const valid = await bcrypt.compare(password, faculty.password_hash);
   if (!valid) return null;
 
   const designations = await resolveFacultyDesignations(faculty);
-  const payload = buildJwtPayload(faculty.facultyId, faculty.emailId, designations);
+  const payload = buildJwtPayload(faculty.faculty_id, faculty.email_id, designations);
   const token = jwt.sign(payload, process.env.JWT_SECRET as string, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+    expiresIn: process.env.JWT_EXPIRES_IN || "24h",
   } as jwt.SignOptions);
 
   return {
     token,
     faculty: {
-      id: faculty.facultyId,
+      id: faculty.faculty_id,
       name: faculty.name,
-      email: faculty.emailId,
+      email: faculty.email_id,
       primaryRole: payload.primaryRole,
       designations,
       role: payload.primaryRole,
@@ -127,29 +158,31 @@ export async function loginStudent(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!isAllowedDomainEmail(normalizedEmail)) return null;
 
-  const student = await prisma.student.findUnique({
-    where: { emailId: normalizedEmail },
-  });
+  const student = await selectOne<StudentRow>(
+    db,
+    "SELECT uid, email_id, current_semester, academic_year, password_hash FROM student WHERE email_id = ? LIMIT 1",
+    [normalizedEmail]
+  );
   if (!student) return null;
 
-  const valid = await bcrypt.compare(password, student.passwordHash);
+  const valid = await bcrypt.compare(password, student.password_hash);
   if (!valid) return null;
 
-  const designations: Role[] = ['Student'];
-  const payload = buildJwtPayload(student.uid, student.emailId, designations);
+  const designations: Role[] = ["Student"];
+  const payload = buildJwtPayload(student.uid, student.email_id, designations);
   const token = jwt.sign(payload, process.env.JWT_SECRET as string, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+    expiresIn: process.env.JWT_EXPIRES_IN || "24h",
   } as jwt.SignOptions);
 
   return {
     token,
     student: {
       uid: student.uid,
-      email: student.emailId,
-      semester: student.currentSemester,
+      email: student.email_id,
+      semester: student.current_semester,
       primaryRole: payload.primaryRole,
       designations,
-      role: 'Student',
+      role: "Student",
     },
   };
 }
@@ -162,18 +195,30 @@ export async function changePassword(
 ): Promise<boolean> {
   let currentHash: string | null = null;
   const normalizedDesignations = uniqueRoles(designations);
-  const isStudent = normalizedDesignations.includes('Student');
-  const isAdmin = normalizedDesignations.includes('Admin');
+  const isStudent = normalizedDesignations.includes("Student");
+  const isAdmin = normalizedDesignations.includes("Admin");
 
   if (isStudent) {
-    const student = await prisma.student.findUnique({ where: { uid: String(id) } });
-    currentHash = student?.passwordHash ?? null;
+    const student = await selectOne<{ password_hash: string }>(
+      db,
+      "SELECT password_hash FROM student WHERE uid = ? LIMIT 1",
+      [String(id)]
+    );
+    currentHash = student?.password_hash ?? null;
   } else if (isAdmin) {
-    const admin = await prisma.adminUser.findUnique({ where: { adminId: Number(id) } });
-    currentHash = admin?.passwordHash ?? null;
+    const admin = await selectOne<{ password_hash: string }>(
+      db,
+      "SELECT password_hash FROM admin_user WHERE admin_id = ? LIMIT 1",
+      [Number(id)]
+    );
+    currentHash = admin?.password_hash ?? null;
   } else {
-    const faculty = await prisma.faculty.findUnique({ where: { facultyId: Number(id) } });
-    currentHash = faculty?.passwordHash ?? null;
+    const faculty = await selectOne<{ password_hash: string }>(
+      db,
+      "SELECT password_hash FROM faculty WHERE faculty_id = ? LIMIT 1",
+      [Number(id)]
+    );
+    currentHash = faculty?.password_hash ?? null;
   }
 
   if (!currentHash) return false;
@@ -184,11 +229,11 @@ export async function changePassword(
   const hash = await bcrypt.hash(newPassword, 12);
 
   if (isStudent) {
-    await prisma.student.update({ where: { uid: String(id) }, data: { passwordHash: hash } });
+    await db.execute("UPDATE student SET password_hash = ? WHERE uid = ?", [hash, String(id)]);
   } else if (isAdmin) {
-    await prisma.adminUser.update({ where: { adminId: Number(id) }, data: { passwordHash: hash } });
+    await db.execute("UPDATE admin_user SET password_hash = ? WHERE admin_id = ?", [hash, Number(id)]);
   } else {
-    await prisma.faculty.update({ where: { facultyId: Number(id) }, data: { passwordHash: hash } });
+    await db.execute("UPDATE faculty SET password_hash = ? WHERE faculty_id = ?", [hash, Number(id)]);
   }
 
   return true;
