@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { authorizeRequest, verifyRequestUser } from "@/lib/auth/session";
 import { jsonError, jsonSuccess } from "@/lib/utils/api-response";
-import type { Role } from "@/types";
+import type { Role, SemesterType } from "@/types";
 import * as authService from "@/services/auth.service";
 import * as adminService from "@/services/admin.service";
 import * as hodService from "@/services/hod.service";
@@ -13,9 +13,12 @@ import * as practicalTeacherService from "@/services/practicalTeacher.service";
 import * as geminiService from "@/services/gemini.service";
 import * as minioService from "@/services/minio.service";
 
-async function readJsonBody(request: NextRequest): Promise<Record<string, any>> {
+type JsonBody = Record<string, unknown>;
+type ProgressionYear = "1st" | "2nd" | "3rd" | "4th";
+
+async function readJsonBody(request: NextRequest): Promise<JsonBody> {
   try {
-    return (await request.json()) as Record<string, any>;
+    return (await request.json()) as JsonBody;
   } catch {
     return {};
   }
@@ -45,6 +48,48 @@ function requireAuthorizedUser(request: NextRequest, roles: Role[], requireConte
 
 function normalizeAudience(value?: string | null) {
   return value?.trim() || undefined;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function readNumber(value: unknown) {
+  return typeof value === "number" ? value : Number(value);
+}
+
+function readStringArray(value: unknown) {
+  return Array.isArray(value) ? value.map((item) => String(item)) : [];
+}
+
+function readAttendanceList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((entry) => {
+    const record = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : {};
+    return {
+      student_uid: readString(record.student_uid),
+      status: readString(record.status),
+    };
+  });
+}
+
+function readOptionalString(value: unknown) {
+  return typeof value === "string" ? value : undefined;
+}
+
+function isSemesterType(value: unknown): value is SemesterType {
+  return value === "ODD" || value === "EVEN";
+}
+
+function isProgressionYear(value: unknown): value is ProgressionYear {
+  return value === "1st" || value === "2nd" || value === "3rd" || value === "4th";
+}
+
+function isPresignedAction(value: unknown): value is "upload" | "download" {
+  return value === "upload" || value === "download";
 }
 
 async function handleAuth(request: NextRequest, slug: string[]) {
@@ -131,13 +176,16 @@ async function handleAdmin(request: NextRequest, slug: string[]) {
     if (request.method === "POST") {
       const body = await readJsonBody(request);
       const semType = body.active_semester_type || body.semester_type;
-      if (!semType || !body.start_date || !body.end_date) {
+      const startDate = readString(body.start_date);
+      const endDate = readString(body.end_date);
+
+      if (!isSemesterType(semType) || !startDate || !endDate) {
         return jsonError("active_semester_type, start_date, and end_date are required.");
       }
       const configId = await adminService.setGlobalConfig(
         semType,
-        body.start_date,
-        body.end_date
+        startDate,
+        endDate
       );
       return jsonSuccess({ config_id: configId }, { status: 201 }, "Global config set.");
     }
@@ -184,7 +232,7 @@ async function handleAdmin(request: NextRequest, slug: string[]) {
 
     if (request.method === "POST" && tail[1] === "promote-year") {
       const body = await readJsonBody(request);
-      if (!body.academic_year || !body.semester_type) {
+      if (!isProgressionYear(body.academic_year) || !isSemesterType(body.semester_type)) {
         return jsonError("academic_year and semester_type are required.");
       }
       return jsonSuccess(
@@ -205,10 +253,11 @@ async function handleAdmin(request: NextRequest, slug: string[]) {
 
   if (tail[0] === "invigilation-matrix" && request.method === "POST") {
     const body = await readJsonBody(request);
-    if (!body.exam_date) {
+    const examDate = readString(body.exam_date);
+    if (!examDate) {
       return jsonError("exam_date is required.");
     }
-    return jsonSuccess(await adminService.generateInvigilationMatrix(body.exam_date));
+    return jsonSuccess(await adminService.generateInvigilationMatrix(examDate));
   }
 
   if (tail[0] === "analytics" && request.method === "GET") {
@@ -254,7 +303,9 @@ async function handleAdmin(request: NextRequest, slug: string[]) {
 
     if (request.method === "POST" && tail.length === 1) {
       const body = await readJsonBody(request);
-      if (!body.title || !body.target_audience) {
+      const title = readString(body.title);
+      const targetAudience = readString(body.target_audience);
+      if (!title || !targetAudience) {
         return jsonError("title and target_audience are required.");
       }
       const noticeId = await adminService.createNotice(body as {
@@ -267,13 +318,14 @@ async function handleAdmin(request: NextRequest, slug: string[]) {
 
     if (request.method === "POST" && tail[1] === "ai") {
       const body = await readJsonBody(request);
-      if (!body.context) {
+      const context = readString(body.context);
+      if (!context) {
         return jsonError("context is required for AI notice generation.");
       }
-      const noticeData = await geminiService.generateInstitutionalNotice(body.context);
+      const noticeData = await geminiService.generateInstitutionalNotice(context);
       const noticeId = await adminService.createNotice({
         title: noticeData.title,
-        target_audience: body.target_audience || "INSTITUTE",
+        target_audience: readString(body.target_audience) || "INSTITUTE",
         ai_filter_tags: noticeData.tags,
       });
       return jsonSuccess(
@@ -300,12 +352,12 @@ async function handleHod(request: NextRequest, slug: string[]) {
   }
   if (tail[0] === "faculty" && tail[1] === "assign-subject" && request.method === "POST") {
     const body = await readJsonBody(request);
-    await hodService.assignSubjectToFaculty(Number(body.subject_id), Number(body.faculty_id));
+    await hodService.assignSubjectToFaculty(readNumber(body.subject_id), readNumber(body.faculty_id));
     return jsonSuccess(undefined, undefined, "Subject assigned.");
   }
   if (tail[0] === "faculty" && tail[1] === "assign-role" && request.method === "POST") {
     const body = await readJsonBody(request);
-    await hodService.assignFacultyRole(Number(body.faculty_id), String(body.role));
+    await hodService.assignFacultyRole(readNumber(body.faculty_id), readString(body.role));
     return jsonSuccess(undefined, undefined, "Faculty role assigned.");
   }
   if (tail[0] === "students" && tail[1] && request.method === "GET") {
@@ -339,12 +391,15 @@ async function handleHod(request: NextRequest, slug: string[]) {
   }
   if (tail[0] === "notices" && request.method === "POST" && tail.length === 1) {
     const body = await readJsonBody(request);
-    const noticeId = await hodService.createBranchNotice(body.title, body.ai_filter_tags);
+    const noticeId = await hodService.createBranchNotice(
+      readString(body.title),
+      Array.isArray(body.ai_filter_tags) ? body.ai_filter_tags.map((tag) => String(tag)) : undefined
+    );
     return jsonSuccess({ notice_id: noticeId }, { status: 201 }, "Branch notice created.");
   }
   if (tail[0] === "notices" && tail[1] === "ai" && request.method === "POST") {
     const body = await readJsonBody(request);
-    const noticeData = await geminiService.generateInstitutionalNotice(body.context);
+    const noticeData = await geminiService.generateInstitutionalNotice(readString(body.context));
     const noticeId = await hodService.createBranchNotice(noticeData.title, noticeData.tags);
     return jsonSuccess({ notice_id: noticeId, ...noticeData }, { status: 201 }, "AI branch notice generated.");
   }
@@ -383,7 +438,10 @@ async function handleClassIncharge(request: NextRequest, slug: string[]) {
   }
   if (tail[0] === "notices" && request.method === "POST") {
     const body = await readJsonBody(request);
-    const noticeId = await classInchargeService.createClassNotice(body.title, body.ai_filter_tags);
+    const noticeId = await classInchargeService.createClassNotice(
+      readString(body.title),
+      Array.isArray(body.ai_filter_tags) ? body.ai_filter_tags.map((tag) => String(tag)) : undefined
+    );
     return jsonSuccess({ notice_id: noticeId }, { status: 201 }, "Class notice created.");
   }
   if (tail[0] === "progression-readiness" && request.method === "GET") {
@@ -408,10 +466,10 @@ async function handleSubjectIncharge(request: NextRequest, slug: string[]) {
   if (tail[0] === "attendance" && request.method === "POST") {
     const body = await readJsonBody(request);
     await subjectInchargeService.markAttendance(
-      Number(body.slot_id),
-      String(body.date),
-      body.present_uids || [],
-      body.absent_uids || []
+      readNumber(body.slot_id),
+      readString(body.date),
+      readStringArray(body.present_uids),
+      readStringArray(body.absent_uids)
     );
     return jsonSuccess(undefined, undefined, "Attendance marked.");
   }
@@ -425,12 +483,20 @@ async function handleSubjectIncharge(request: NextRequest, slug: string[]) {
   }
   if (tail[0] === "marks" && request.method === "POST" && tail.length === 1) {
     const body = await readJsonBody(request);
-    await subjectInchargeService.upsertMarks(body.student_uid, Number(body.subject_id), Number(body.marks));
+    await subjectInchargeService.upsertMarks(
+      readString(body.student_uid),
+      readNumber(body.subject_id),
+      readNumber(body.marks)
+    );
     return jsonSuccess(undefined, undefined, "Marks saved.");
   }
   if (tail[0] === "marks" && tail[1] === "suppli" && request.method === "POST") {
     const body = await readJsonBody(request);
-    await subjectInchargeService.upsertSuppliMarks(body.student_uid, Number(body.subject_id), Number(body.marks));
+    await subjectInchargeService.upsertSuppliMarks(
+      readString(body.student_uid),
+      readNumber(body.subject_id),
+      readNumber(body.marks)
+    );
     return jsonSuccess(undefined, undefined, "Supplementary marks saved.");
   }
   if (tail[0] === "marks" && tail[1] && request.method === "GET") {
@@ -456,11 +522,11 @@ async function handleSubjectIncharge(request: NextRequest, slug: string[]) {
     const body = await readJsonBody(request);
     return jsonSuccess(
       {
-        subject_id: Number(body.subject_id),
-        object_name: body.fileKey,
-        file_name: body.fileName,
-        file_type: body.fileType,
-        bucket_name: body.bucketName || "study-materials",
+        subject_id: readNumber(body.subject_id),
+        object_name: readString(body.fileKey),
+        file_name: readString(body.fileName),
+        file_type: readString(body.fileType),
+        bucket_name: readString(body.bucketName) || "study-materials",
       },
       { status: 201 },
       "Material upload registered."
@@ -469,7 +535,10 @@ async function handleSubjectIncharge(request: NextRequest, slug: string[]) {
   if (tail[0] === "syllabus-analysis" && request.method === "POST") {
     const body = await readJsonBody(request);
     return jsonSuccess(
-      await geminiService.analyzeSyllabusPacing(body.lecture_logs_summary, body.syllabus_pdf_url)
+      await geminiService.analyzeSyllabusPacing(
+        readString(body.lecture_logs_summary),
+        readString(body.syllabus_pdf_url)
+      )
     );
   }
 
@@ -500,7 +569,11 @@ async function handlePracticalTeacher(request: NextRequest, slug: string[]) {
   }
   if (tail[0] === "sessions" && tail[2] === "attendance" && request.method === "POST") {
     const body = await readJsonBody(request);
-    await practicalTeacherService.markLabAttendance(Number(tail[1]), facultyId, body.attendance || []);
+    await practicalTeacherService.markLabAttendance(
+      Number(tail[1]),
+      facultyId,
+      readAttendanceList(body.attendance)
+    );
     return jsonSuccess(undefined, undefined, "Lab attendance saved.");
   }
   if (tail[0] === "sessions" && tail[2] === "attendance" && request.method === "GET") {
@@ -638,12 +711,14 @@ async function handleStudent(request: NextRequest, slug: string[]) {
   }
   if (tail[0] === "grievances" && request.method === "POST") {
     const body = await readJsonBody(request);
-    const routing = await geminiService.routeGrievance(body.category, body.description);
+    const category = readString(body.category);
+    const description = readString(body.description);
+    const routing = await geminiService.routeGrievance(category, description);
     const ticketId = await studentService.submitGrievance({
       student_uid: uid,
-      category: body.category,
-      description: body.description,
-      evidence: body.evidence,
+      category,
+      description,
+      evidence: readOptionalString(body.evidence),
     });
     return jsonSuccess(
       { ticket_id: ticketId, ai_routing: routing },
@@ -682,15 +757,15 @@ async function handleStorage(request: NextRequest, slug: string[]) {
   }
 
   const body = await readJsonBody(request);
-  if (!body.action || !body.fileName) {
+  if (!isPresignedAction(body.action) || !readString(body.fileName)) {
     return jsonError("action and fileName are required.");
   }
 
   const result = await minioService.generatePresignedObjectUrl({
     action: body.action,
-    bucketName: body.bucketName,
-    fileName: body.fileName,
-    fileType: body.fileType,
+    bucketName: readString(body.bucketName),
+    fileName: readString(body.fileName),
+    fileType: readString(body.fileType),
     userId: auth.user.id,
   });
 

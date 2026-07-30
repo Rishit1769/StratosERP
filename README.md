@@ -4,7 +4,7 @@ StratosERP is a Next.js 16 application backed by MySQL. The app currently uses `
 
 ## Prerequisites
 
-- Node.js `>=18` (the current repo is working on Node `v24.14.0`)
+- Node.js `>=20.9.0` (required by Next.js 16; the current repo is working on Node `v24.14.0`)
 - npm `>=10`
 - MySQL `8.0+`
 - Optional: MinIO and a Gemini API key for the storage and AI features

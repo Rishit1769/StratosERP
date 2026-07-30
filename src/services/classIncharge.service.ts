@@ -1,6 +1,6 @@
 import { db, parseJsonArray, selectOne, selectRows, run, type DbRow } from "@/lib/db";
 
-export async function getClassAnalytics(_classId?: string) {
+export async function getClassAnalytics() {
   const rows = await selectRows<{ marks: number | null; status: string }>(
     db,
     `

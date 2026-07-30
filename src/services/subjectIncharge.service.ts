@@ -1,4 +1,4 @@
-import { db, run, selectOne, selectRows, withTransaction, type DbRow } from "@/lib/db";
+import { db, selectOne, selectRows, withTransaction, type DbRow } from "@/lib/db";
 
 export async function upsertMarks(studentUid: string, subjectId: number, marks: number) {
   await db.execute(

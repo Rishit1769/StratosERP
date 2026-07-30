@@ -1,5 +1,38 @@
 import { getGeminiModel } from '@/lib/notifications/gemini';
 
+type PortfolioStudent = {
+  uid?: string;
+  current_semester?: string | number;
+  academic_year?: string;
+};
+
+type PortfolioGrievance = {
+  status?: string;
+};
+
+type ImprovementPortfolio = {
+  student?: PortfolioStudent | null;
+  subjects?: unknown;
+  aicte_points?: unknown;
+  grievances?: PortfolioGrievance[] | unknown[];
+};
+
+type PtmPortfolio = {
+  student?: PortfolioStudent | null;
+  backlog_count?: number;
+  subjects?: unknown;
+  grievances?: unknown[];
+};
+
+function getGrievanceStatus(grievance: unknown) {
+  if (typeof grievance !== 'object' || grievance === null) {
+    return undefined;
+  }
+
+  const record = grievance as Record<string, unknown>;
+  return typeof record.status === 'string' ? record.status : undefined;
+}
+
 // ── Grievance Routing ─────────────────────────────────────────
 
 export async function routeGrievance(
@@ -103,7 +136,7 @@ Respond ONLY in JSON format:
 
 // ── Areas of Improvement Report ───────────────────────────────
 
-export async function generateAreasOfImprovement(portfolio: any): Promise<string> {
+export async function generateAreasOfImprovement(portfolio: ImprovementPortfolio): Promise<string> {
   const model = getGeminiModel();
   const prompt = `
 You are a Teacher Guardian AI assistant for a college ERP.
@@ -119,7 +152,7 @@ ${JSON.stringify(portfolio.subjects, null, 2)}
 AICTE Points:
 ${JSON.stringify(portfolio.aicte_points, null, 2)}
 
-Active Grievances: ${portfolio.grievances?.filter((g: any) => g.status === 'Open').length || 0}
+Active Grievances: ${portfolio.grievances?.filter((grievance) => getGrievanceStatus(grievance) === 'Open').length || 0}
 
 Write a professional, empathetic 3-5 paragraph report highlighting:
 1. Academic strengths
@@ -141,7 +174,7 @@ Keep the tone formal and supportive (suitable for sharing with parents).
 
 // ── PTM Report Generation ─────────────────────────────────────
 
-export async function generatePTMReport(portfolio: any): Promise<string> {
+export async function generatePTMReport(portfolio: PtmPortfolio): Promise<string> {
   const model = getGeminiModel();
   const prompt = `
 You are a Class Incharge AI assistant generating a Parent-Teacher Meeting (PTM) report.
