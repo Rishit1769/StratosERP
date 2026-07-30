@@ -1,6 +1,6 @@
-import bcrypt from 'bcryptjs';
-import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+import bcrypt from "bcryptjs";
+import dotenv from "dotenv";
+import { PrismaClient } from "@prisma/client";
 
 dotenv.config({ path: `${process.cwd()}\\.env` });
 dotenv.config();
@@ -15,7 +15,7 @@ function ensureDatabaseUrl(): void {
     return;
   }
 
-  const encodedPassword = encodeURIComponent(DB_PASSWORD ?? '');
+  const encodedPassword = encodeURIComponent(DB_PASSWORD ?? "");
   process.env.DATABASE_URL = `mysql://${DB_USER}:${encodedPassword}@${DB_HOST}:${DB_PORT}/${DB_NAME}`;
 }
 
@@ -23,356 +23,212 @@ ensureDatabaseUrl();
 
 const prisma = new PrismaClient();
 
-const SEED_PASSWORD = 'Password@123';
+const SEED_PASSWORD = process.env.SEED_DEFAULT_PASSWORD || "Password@123";
 
-const LEGACY_ADMIN_EMAILS = ['admin@tcetmumbai.in', 'admin@stratoserp.edu'];
-const LEGACY_FACULTY_EMAILS = [
-  'admin@tcetmumbai.in',
-  'hod@tcetmumbai.in',
-  'subject@tcetmumbai.in',
-  'class@tcetmumbai.in',
-  'guardian@tcetmumbai.in',
-];
-const LEGACY_STUDENT_EMAILS = ['student@tcetmumbai.in'];
-const PREVIOUS_STRATOS_ADMIN_EMAILS = ['admin@stratos.erp'];
-const PREVIOUS_STRATOS_FACULTY_EMAILS = [
-  'hodcomp@stratos.erp',
-  'subjectinchargecomp@stratos.erp',
-  'classinchargecomp@stratos.erp',
-  'teacherguardiancomp@stratos.erp',
-];
-const PREVIOUS_STRATOS_STUDENT_EMAILS = ['studentcomp@stratos.erp'];
-
-const TARGET_USERS = {
+const seedUsers = {
   admin: {
-    name: 'Stratos Admin',
-    emailId: 'admin@tcetmumbai.in',
+    name: "Stratos Admin",
+    emailId: "admin@tcetmumbai.in",
   },
-  hod: {
-    name: 'Computer HOD',
-    emailId: 'hodcomp@tcetmumbai.in',
-    designationRole: 'Subject Incharge',
-    isHod: true,
-  },
-  subjectIncharge: {
-    name: 'Computer Subject Incharge',
-    emailId: 'subjectinchargecomp@tcetmumbai.in',
-    designationRole: 'Subject Incharge',
-    isHod: false,
-  },
-  classIncharge: {
-    name: 'Computer Class Incharge',
-    emailId: 'classinchargecomp@tcetmumbai.in',
-    designationRole: 'Class Incharge',
-    isHod: false,
-  },
-  teacherGuardian: {
-    name: 'Computer Teacher Guardian',
-    emailId: 'teacherguardiancomp@tcetmumbai.in',
-    designationRole: 'TG',
-    isHod: false,
-  },
+  faculty: [
+    {
+      label: "HOD",
+      name: "Computer HOD",
+      emailId: "hodcomp@tcetmumbai.in",
+      designationRole: "Subject Incharge",
+      isHod: true,
+    },
+    {
+      label: "SubjectIncharge",
+      name: "Computer Subject Incharge",
+      emailId: "subjectinchargecomp@tcetmumbai.in",
+      designationRole: "Subject Incharge",
+      isHod: false,
+    },
+    {
+      label: "ClassIncharge",
+      name: "Computer Class Incharge",
+      emailId: "classinchargecomp@tcetmumbai.in",
+      designationRole: "Class Incharge",
+      isHod: false,
+    },
+    {
+      label: "TG",
+      name: "Computer Teacher Guardian",
+      emailId: "teacherguardiancomp@tcetmumbai.in",
+      designationRole: "TG",
+      isHod: false,
+    },
+  ],
   student: {
-    uid: 'STUDENT-COMP-001',
-    emailId: 'studentcomp@tcetmumbai.in',
+    uid: "STUDENT-COMP-001",
+    emailId: "studentcomp@tcetmumbai.in",
     currentSemester: 5,
-    academicYear: '3rd',
+    academicYear: "3rd",
   },
 } as const;
 
-async function removeLegacySeedData() {
-  const legacyFaculty = await prisma.faculty.findMany({
-    where: {
-      emailId: {
-        in: [...LEGACY_FACULTY_EMAILS, ...PREVIOUS_STRATOS_FACULTY_EMAILS],
-      },
-    },
-    select: {
-      facultyId: true,
-    },
-  });
+const legacySeedEmails = {
+  admin: ["admin@stratoserp.edu", "admin@stratos.erp"],
+  faculty: [
+    "admin@tcetmumbai.in",
+    "hod@tcetmumbai.in",
+    "subject@tcetmumbai.in",
+    "class@tcetmumbai.in",
+    "guardian@tcetmumbai.in",
+    "hodcomp@stratos.erp",
+    "subjectinchargecomp@stratos.erp",
+    "classinchargecomp@stratos.erp",
+    "teacherguardiancomp@stratos.erp",
+  ],
+  student: ["student@tcetmumbai.in", "studentcomp@stratos.erp"],
+};
 
-  const legacyStudents = await prisma.student.findMany({
-    where: {
-      emailId: {
-        in: [...LEGACY_STUDENT_EMAILS, ...PREVIOUS_STRATOS_STUDENT_EMAILS],
-      },
-    },
-    select: {
-      uid: true,
-    },
-  });
+type SeedStats = {
+  created: string[];
+  skipped: string[];
+  warnings: string[];
+};
 
-  const legacyFacultyIds = legacyFaculty.map((faculty) => faculty.facultyId);
-  const legacyStudentUids = legacyStudents.map((student) => student.uid);
+function logStats(stats: SeedStats): void {
+  for (const item of stats.created) {
+    console.log(`[seed] created ${item}`);
+  }
 
-  await prisma.$transaction(async (tx) => {
-    if (legacyFacultyIds.length > 0) {
-      await tx.aictePoints.deleteMany({
-        where: {
-          awardedBy: {
-            in: legacyFacultyIds,
-          },
-        },
-      });
-      await tx.leaveSubstitution.deleteMany({
-        where: {
-          OR: [
-            {
-              absentFacultyId: {
-                in: legacyFacultyIds,
-              },
-            },
-            {
-              substituteFacultyId: {
-                in: legacyFacultyIds,
-              },
-            },
-          ],
-        },
-      });
-      await tx.labMark.deleteMany({
-        where: {
-          updatedBy: {
-            in: legacyFacultyIds,
-          },
-        },
-      });
-      await tx.labSession.deleteMany({
-        where: {
-          OR: [
-            {
-              assignedFacultyId: {
-                in: legacyFacultyIds,
-              },
-            },
-            {
-              originalFacultyId: {
-                in: legacyFacultyIds,
-              },
-            },
-          ],
-        },
-      });
-      await tx.labBatch.deleteMany({
-        where: {
-          facultyId: {
-            in: legacyFacultyIds,
-          },
-        },
-      });
-      await tx.timetableSlot.deleteMany({
-        where: {
-          facultyId: {
-            in: legacyFacultyIds,
-          },
-        },
-      });
-      await tx.grievanceTicket.deleteMany({
-        where: {
-          assignedAuthorityId: {
-            in: legacyFacultyIds,
-          },
-        },
-      });
-      await tx.tgAssignment.deleteMany({
-        where: {
-          facultyId: {
-            in: legacyFacultyIds,
-          },
-        },
-      });
-    }
+  for (const item of stats.skipped) {
+    console.log(`[seed] skipped ${item}`);
+  }
 
-    if (legacyStudentUids.length > 0) {
-      await tx.labSubmission.deleteMany({
-        where: {
-          studentUid: {
-            in: legacyStudentUids,
-          },
-        },
-      });
-      await tx.labMark.deleteMany({
-        where: {
-          studentUid: {
-            in: legacyStudentUids,
-          },
-        },
-      });
-      await tx.aictePoints.deleteMany({
-        where: {
-          studentUid: {
-            in: legacyStudentUids,
-          },
-        },
-      });
-      await tx.grievanceTicket.deleteMany({
-        where: {
-          studentUid: {
-            in: legacyStudentUids,
-          },
-        },
-      });
-      await tx.labAttendance.deleteMany({
-        where: {
-          studentUid: {
-            in: legacyStudentUids,
-          },
-        },
-      });
-      await tx.studentSubjectRecord.deleteMany({
-        where: {
-          studentUid: {
-            in: legacyStudentUids,
-          },
-        },
-      });
-      await tx.tgAssignment.deleteMany({
-        where: {
-          studentUid: {
-            in: legacyStudentUids,
-          },
-        },
-      });
-    }
-
-    await tx.adminUser.deleteMany({
-      where: {
-        emailId: {
-          in: [...LEGACY_ADMIN_EMAILS, ...PREVIOUS_STRATOS_ADMIN_EMAILS],
-        },
-      },
-    });
-    await tx.faculty.deleteMany({
-      where: {
-        emailId: {
-          in: [...LEGACY_FACULTY_EMAILS, ...PREVIOUS_STRATOS_FACULTY_EMAILS],
-        },
-      },
-    });
-    await tx.student.deleteMany({
-      where: {
-        emailId: {
-          in: [...LEGACY_STUDENT_EMAILS, ...PREVIOUS_STRATOS_STUDENT_EMAILS],
-        },
-      },
-    });
-  });
+  for (const item of stats.warnings) {
+    console.warn(`[seed] warning ${item}`);
+  }
 }
 
-async function seedUsers() {
+async function logLegacySeedUsers(stats: SeedStats): Promise<void> {
+  const [legacyAdmins, legacyFaculty, legacyStudents] = await Promise.all([
+    prisma.adminUser.findMany({
+      where: { emailId: { in: legacySeedEmails.admin } },
+      select: { emailId: true },
+    }),
+    prisma.faculty.findMany({
+      where: { emailId: { in: legacySeedEmails.faculty } },
+      select: { emailId: true },
+    }),
+    prisma.student.findMany({
+      where: { emailId: { in: legacySeedEmails.student } },
+      select: { emailId: true },
+    }),
+  ]);
+
+  const legacyEmails = [...legacyAdmins, ...legacyFaculty, ...legacyStudents].map((user) => user.emailId);
+  if (legacyEmails.length > 0) {
+    stats.warnings.push(
+      `legacy seed users detected and left untouched: ${legacyEmails.join(", ")}`
+    );
+  }
+}
+
+async function seedAdmin(passwordHash: string, stats: SeedStats): Promise<void> {
+  const existing = await prisma.adminUser.findUnique({
+    where: { emailId: seedUsers.admin.emailId },
+    select: { adminId: true },
+  });
+
+  if (existing) {
+    stats.skipped.push(`admin ${seedUsers.admin.emailId}`);
+    return;
+  }
+
+  await prisma.adminUser.create({
+    data: {
+      name: seedUsers.admin.name,
+      emailId: seedUsers.admin.emailId,
+      passwordHash,
+    },
+  });
+
+  stats.created.push(`admin ${seedUsers.admin.emailId}`);
+}
+
+async function seedFaculty(passwordHash: string, stats: SeedStats): Promise<void> {
+  for (const facultySeed of seedUsers.faculty) {
+    const existing = await prisma.faculty.findUnique({
+      where: { emailId: facultySeed.emailId },
+      select: { facultyId: true },
+    });
+
+    if (existing) {
+      stats.skipped.push(`faculty ${facultySeed.emailId}`);
+      continue;
+    }
+
+    await prisma.faculty.create({
+      data: {
+        name: facultySeed.name,
+        emailId: facultySeed.emailId,
+        designationRole: facultySeed.designationRole,
+        passwordHash,
+        isHod: facultySeed.isHod,
+      },
+    });
+
+    stats.created.push(`faculty ${facultySeed.emailId} (${facultySeed.label})`);
+  }
+}
+
+async function seedStudent(passwordHash: string, stats: SeedStats): Promise<void> {
+  const existingStudent =
+    (await prisma.student.findUnique({
+      where: { emailId: seedUsers.student.emailId },
+      select: { uid: true },
+    })) ??
+    (await prisma.student.findUnique({
+      where: { uid: seedUsers.student.uid },
+      select: { uid: true, emailId: true },
+    }));
+
+  if (existingStudent) {
+    stats.skipped.push(`student ${seedUsers.student.emailId}`);
+    return;
+  }
+
+  await prisma.student.create({
+    data: {
+      uid: seedUsers.student.uid,
+      emailId: seedUsers.student.emailId,
+      currentSemester: seedUsers.student.currentSemester,
+      academicYear: seedUsers.student.academicYear,
+      passwordHash,
+    },
+  });
+
+  stats.created.push(`student ${seedUsers.student.emailId}`);
+}
+
+async function main(): Promise<void> {
+  const stats: SeedStats = {
+    created: [],
+    skipped: [],
+    warnings: [],
+  };
+
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, 12);
 
-  await prisma.adminUser.upsert({
-    where: { emailId: TARGET_USERS.admin.emailId },
-    update: {
-      name: TARGET_USERS.admin.name,
-      passwordHash,
-    },
-    create: {
-      name: TARGET_USERS.admin.name,
-      emailId: TARGET_USERS.admin.emailId,
-      passwordHash,
-    },
-  });
+  await logLegacySeedUsers(stats);
+  await seedAdmin(passwordHash, stats);
+  await seedFaculty(passwordHash, stats);
+  await seedStudent(passwordHash, stats);
 
-  await prisma.faculty.upsert({
-    where: { emailId: TARGET_USERS.hod.emailId },
-    update: {
-      name: TARGET_USERS.hod.name,
-      designationRole: TARGET_USERS.hod.designationRole,
-      passwordHash,
-      isHod: TARGET_USERS.hod.isHod,
-    },
-    create: {
-      name: TARGET_USERS.hod.name,
-      emailId: TARGET_USERS.hod.emailId,
-      designationRole: TARGET_USERS.hod.designationRole,
-      passwordHash,
-      isHod: TARGET_USERS.hod.isHod,
-    },
-  });
-
-  await prisma.faculty.upsert({
-    where: { emailId: TARGET_USERS.subjectIncharge.emailId },
-    update: {
-      name: TARGET_USERS.subjectIncharge.name,
-      designationRole: TARGET_USERS.subjectIncharge.designationRole,
-      passwordHash,
-      isHod: TARGET_USERS.subjectIncharge.isHod,
-    },
-    create: {
-      name: TARGET_USERS.subjectIncharge.name,
-      emailId: TARGET_USERS.subjectIncharge.emailId,
-      designationRole: TARGET_USERS.subjectIncharge.designationRole,
-      passwordHash,
-      isHod: TARGET_USERS.subjectIncharge.isHod,
-    },
-  });
-
-  await prisma.faculty.upsert({
-    where: { emailId: TARGET_USERS.classIncharge.emailId },
-    update: {
-      name: TARGET_USERS.classIncharge.name,
-      designationRole: TARGET_USERS.classIncharge.designationRole,
-      passwordHash,
-      isHod: TARGET_USERS.classIncharge.isHod,
-    },
-    create: {
-      name: TARGET_USERS.classIncharge.name,
-      emailId: TARGET_USERS.classIncharge.emailId,
-      designationRole: TARGET_USERS.classIncharge.designationRole,
-      passwordHash,
-      isHod: TARGET_USERS.classIncharge.isHod,
-    },
-  });
-
-  await prisma.faculty.upsert({
-    where: { emailId: TARGET_USERS.teacherGuardian.emailId },
-    update: {
-      name: TARGET_USERS.teacherGuardian.name,
-      designationRole: TARGET_USERS.teacherGuardian.designationRole,
-      passwordHash,
-      isHod: TARGET_USERS.teacherGuardian.isHod,
-    },
-    create: {
-      name: TARGET_USERS.teacherGuardian.name,
-      emailId: TARGET_USERS.teacherGuardian.emailId,
-      designationRole: TARGET_USERS.teacherGuardian.designationRole,
-      passwordHash,
-      isHod: TARGET_USERS.teacherGuardian.isHod,
-    },
-  });
-
-  await prisma.student.upsert({
-    where: { emailId: TARGET_USERS.student.emailId },
-    update: {
-      uid: TARGET_USERS.student.uid,
-      currentSemester: TARGET_USERS.student.currentSemester,
-      academicYear: TARGET_USERS.student.academicYear,
-      passwordHash,
-    },
-    create: {
-      uid: TARGET_USERS.student.uid,
-      emailId: TARGET_USERS.student.emailId,
-      currentSemester: TARGET_USERS.student.currentSemester,
-      academicYear: TARGET_USERS.student.academicYear,
-      passwordHash,
-    },
-  });
-}
-
-async function main() {
-  await removeLegacySeedData();
-  await seedUsers();
-  console.log('Seeded StratosERP users successfully.');
+  logStats(stats);
+  console.log("[seed] completed successfully");
 }
 
 main()
-  .catch((error) => {
-    console.error('Seeding failed.', error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
+  .then(async () => {
     await prisma.$disconnect();
+  })
+  .catch(async (error) => {
+    console.error("[seed] database seeding failed:", error);
+    await prisma.$disconnect();
+    process.exit(1);
   });

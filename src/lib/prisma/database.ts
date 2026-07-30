@@ -1,5 +1,5 @@
-import { prisma } from '@stratoserp/database';
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
+import { prisma } from "./client";
 
 dotenv.config();
 

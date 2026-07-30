@@ -1,4 +1,4 @@
--- CreateTable
+﻿-- CreateTable
 CREATE TABLE `subject` (
     `subject_id` INTEGER NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(100) NOT NULL,
@@ -26,6 +26,7 @@ CREATE TABLE `faculty` (
     `email_id` VARCHAR(150) NOT NULL,
     `designation_role` VARCHAR(30) NOT NULL,
     `password_hash` VARCHAR(255) NOT NULL DEFAULT '',
+    `is_admin` BOOLEAN NOT NULL DEFAULT false,
     `is_hod` BOOLEAN NOT NULL DEFAULT false,
 
     UNIQUE INDEX `email_id`(`email_id`),
@@ -187,8 +188,7 @@ CREATE TABLE `lab_attendance` (
     `student_uid` VARCHAR(30) NOT NULL,
     `status` VARCHAR(10) NOT NULL,
 
-    INDEX `idx_lab_attendance_session`(`session_id`),
-    INDEX `fk_lab_attendance_student`(`student_uid`),
+    INDEX `fk_la_student`(`student_uid`),
     INDEX `idx_lab_att_sess`(`session_id`),
     UNIQUE INDEX `uq_lab_attendance`(`session_id`, `student_uid`),
     PRIMARY KEY (`attendance_id`)
@@ -209,11 +209,10 @@ CREATE TABLE `lab_marks` (
     `updated_by` INTEGER NULL,
     `updated_at` TIMESTAMP(0) NOT NULL DEFAULT CURRENT_TIMESTAMP(0),
 
-    INDEX `idx_lab_marks_student`(`student_uid`),
-    INDEX `fk_lab_marks_experiment`(`experiment_id`),
-    INDEX `fk_lab_marks_faculty`(`updated_by`),
-    INDEX `fk_lab_marks_session`(`session_id`),
-    INDEX `fk_lab_marks_subject`(`subject_id`),
+    INDEX `fk_lm_experiment`(`experiment_id`),
+    INDEX `fk_lm_faculty`(`updated_by`),
+    INDEX `fk_lm_session`(`session_id`),
+    INDEX `fk_lm_subject`(`subject_id`),
     INDEX `idx_lab_marks_stu`(`student_uid`),
     UNIQUE INDEX `uq_lab_marks`(`student_uid`, `experiment_id`),
     PRIMARY KEY (`mark_id`)
@@ -228,8 +227,8 @@ CREATE TABLE `lab_submission` (
     `submitted_at` TIMESTAMP(0) NOT NULL DEFAULT CURRENT_TIMESTAMP(0),
     `status` VARCHAR(15) NULL,
 
-    INDEX `fk_submission_experiment`(`experiment_id`),
-    INDEX `fk_submission_student`(`student_uid`),
+    INDEX `fk_ls_experiment`(`experiment_id`),
+    UNIQUE INDEX `uq_lab_submission`(`student_uid`, `experiment_id`),
     PRIMARY KEY (`submission_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -243,7 +242,7 @@ CREATE TABLE `aicte_points` (
     `awarded_at` TIMESTAMP(0) NOT NULL DEFAULT CURRENT_TIMESTAMP(0),
 
     INDEX `idx_aicte_student`(`student_uid`),
-    INDEX `fk_aicte_faculty`(`awarded_by`),
+    INDEX `fk_ap_faculty`(`awarded_by`),
     INDEX `idx_aicte_stu`(`student_uid`),
     PRIMARY KEY (`record_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -262,3 +261,91 @@ CREATE TABLE `tg_assignment` (
     UNIQUE INDEX `uq_tga`(`faculty_id`, `student_uid`, `semester`),
     PRIMARY KEY (`assignment_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- AddForeignKey
+ALTER TABLE `student_subject_record` ADD CONSTRAINT `student_subject_record_student_uid_fkey` FOREIGN KEY (`student_uid`) REFERENCES `student`(`uid`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `student_subject_record` ADD CONSTRAINT `student_subject_record_subject_id_fkey` FOREIGN KEY (`subject_id`) REFERENCES `subject`(`subject_id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `timetable_slot` ADD CONSTRAINT `timetable_slot_subject_id_fkey` FOREIGN KEY (`subject_id`) REFERENCES `subject`(`subject_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `timetable_slot` ADD CONSTRAINT `timetable_slot_faculty_id_fkey` FOREIGN KEY (`faculty_id`) REFERENCES `faculty`(`faculty_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lecture_log` ADD CONSTRAINT `lecture_log_slot_id_fkey` FOREIGN KEY (`slot_id`) REFERENCES `timetable_slot`(`slot_id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `grievance_ticket` ADD CONSTRAINT `grievance_ticket_student_uid_fkey` FOREIGN KEY (`student_uid`) REFERENCES `student`(`uid`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `grievance_ticket` ADD CONSTRAINT `grievance_ticket_assigned_authority_id_fkey` FOREIGN KEY (`assigned_authority_id`) REFERENCES `faculty`(`faculty_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `leave_substitution` ADD CONSTRAINT `leave_substitution_absent_faculty_id_fkey` FOREIGN KEY (`absent_faculty_id`) REFERENCES `faculty`(`faculty_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `leave_substitution` ADD CONSTRAINT `leave_substitution_substitute_faculty_id_fkey` FOREIGN KEY (`substitute_faculty_id`) REFERENCES `faculty`(`faculty_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_batch` ADD CONSTRAINT `lab_batch_subject_id_fkey` FOREIGN KEY (`subject_id`) REFERENCES `subject`(`subject_id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_batch` ADD CONSTRAINT `lab_batch_faculty_id_fkey` FOREIGN KEY (`faculty_id`) REFERENCES `faculty`(`faculty_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `experiment` ADD CONSTRAINT `experiment_subject_id_fkey` FOREIGN KEY (`subject_id`) REFERENCES `subject`(`subject_id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_session` ADD CONSTRAINT `lab_session_subject_id_fkey` FOREIGN KEY (`subject_id`) REFERENCES `subject`(`subject_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_session` ADD CONSTRAINT `lab_session_batch_id_fkey` FOREIGN KEY (`batch_id`) REFERENCES `lab_batch`(`batch_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_session` ADD CONSTRAINT `lab_session_assigned_faculty_id_fkey` FOREIGN KEY (`assigned_faculty_id`) REFERENCES `faculty`(`faculty_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_session` ADD CONSTRAINT `lab_session_original_faculty_id_fkey` FOREIGN KEY (`original_faculty_id`) REFERENCES `faculty`(`faculty_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_attendance` ADD CONSTRAINT `lab_attendance_session_id_fkey` FOREIGN KEY (`session_id`) REFERENCES `lab_session`(`session_id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_attendance` ADD CONSTRAINT `lab_attendance_student_uid_fkey` FOREIGN KEY (`student_uid`) REFERENCES `student`(`uid`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_marks` ADD CONSTRAINT `lab_marks_student_uid_fkey` FOREIGN KEY (`student_uid`) REFERENCES `student`(`uid`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_marks` ADD CONSTRAINT `lab_marks_subject_id_fkey` FOREIGN KEY (`subject_id`) REFERENCES `subject`(`subject_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_marks` ADD CONSTRAINT `lab_marks_experiment_id_fkey` FOREIGN KEY (`experiment_id`) REFERENCES `experiment`(`experiment_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_marks` ADD CONSTRAINT `lab_marks_session_id_fkey` FOREIGN KEY (`session_id`) REFERENCES `lab_session`(`session_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_marks` ADD CONSTRAINT `lab_marks_updated_by_fkey` FOREIGN KEY (`updated_by`) REFERENCES `faculty`(`faculty_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_submission` ADD CONSTRAINT `lab_submission_student_uid_fkey` FOREIGN KEY (`student_uid`) REFERENCES `student`(`uid`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `lab_submission` ADD CONSTRAINT `lab_submission_experiment_id_fkey` FOREIGN KEY (`experiment_id`) REFERENCES `experiment`(`experiment_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `aicte_points` ADD CONSTRAINT `aicte_points_student_uid_fkey` FOREIGN KEY (`student_uid`) REFERENCES `student`(`uid`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `aicte_points` ADD CONSTRAINT `aicte_points_awarded_by_fkey` FOREIGN KEY (`awarded_by`) REFERENCES `faculty`(`faculty_id`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `tg_assignment` ADD CONSTRAINT `tg_assignment_faculty_id_fkey` FOREIGN KEY (`faculty_id`) REFERENCES `faculty`(`faculty_id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `tg_assignment` ADD CONSTRAINT `tg_assignment_student_uid_fkey` FOREIGN KEY (`student_uid`) REFERENCES `student`(`uid`) ON DELETE CASCADE ON UPDATE CASCADE;
+

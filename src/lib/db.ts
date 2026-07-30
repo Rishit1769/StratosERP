@@ -1,31 +1,67 @@
 import mysql, {
   type Pool,
   type PoolConnection,
+  type PoolOptions,
   type ResultSetHeader,
-  type RowDataPacket,
 } from "mysql2/promise";
 
-export const db = mysql.createPool({
-  host: "100.83.134.27",
-  user: "rishit",
-  password: "159753AA",
-  database: "StratosERP",
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  decimalNumbers: true,
-});
+function buildDatabaseUrlFromParts(): string | null {
+  const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME } = process.env;
+  if (!DB_HOST || !DB_USER || !DB_NAME) {
+    return null;
+  }
+
+  const port = DB_PORT || "3306";
+  const encodedPassword = encodeURIComponent(DB_PASSWORD ?? "");
+  return `mysql://${DB_USER}:${encodedPassword}@${DB_HOST}:${port}/${DB_NAME}`;
+}
+
+function resolveDatabaseUrl(): string {
+  const databaseUrl = process.env.DATABASE_URL || buildDatabaseUrlFromParts();
+  if (!databaseUrl) {
+    throw new Error(
+      "Missing database configuration. Set DATABASE_URL or the DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, and DB_NAME variables."
+    );
+  }
+
+  process.env.DATABASE_URL = databaseUrl;
+  return databaseUrl;
+}
+
+function buildPoolOptions(): PoolOptions {
+  const url = new URL(resolveDatabaseUrl());
+  const databaseName = url.pathname.replace(/^\//, "");
+
+  if (!databaseName) {
+    throw new Error("DATABASE_URL must include a database name.");
+  }
+
+  return {
+    host: url.hostname,
+    port: url.port ? Number(url.port) : 3306,
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: databaseName,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    decimalNumbers: true,
+  };
+}
+
+export const db = mysql.createPool(buildPoolOptions());
 
 export type DbExecutor = Pool | PoolConnection;
-export type DbRow = RowDataPacket & Record<string, unknown>;
+export type DbParam = string | number | boolean | Date | null;
+export type DbRow = Record<string, unknown>;
 
 export async function selectRows<T extends DbRow>(
   executor: DbExecutor,
   sql: string,
   params: unknown[] = []
 ): Promise<T[]> {
-  const [rows] = await executor.execute<T[]>(sql, params);
-  return rows;
+  const [rows] = await executor.execute(sql, params as DbParam[]);
+  return rows as T[];
 }
 
 export async function selectOne<T extends DbRow>(
@@ -42,8 +78,8 @@ export async function run(
   sql: string,
   params: unknown[] = []
 ): Promise<ResultSetHeader> {
-  const [result] = await executor.execute<ResultSetHeader>(sql, params);
-  return result;
+  const [result] = await executor.execute(sql, params as DbParam[]);
+  return result as ResultSetHeader;
 }
 
 export async function withTransaction<T>(

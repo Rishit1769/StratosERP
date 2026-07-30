@@ -8,11 +8,11 @@ datasource db {
 }
 
 model Subject {
-  subjectId      Int     @id @default(autoincrement()) @map("subject_id")
-  name           String  @db.VarChar(100)
-  semesterLevel  Int     @map("semester_level")
-  hasLab         Boolean @default(false) @map("has_lab")
-  labMarksWeight Int?    @map("lab_marks_weight")
+  subjectId      Int                    @id @default(autoincrement()) @map("subject_id")
+  name           String                 @db.VarChar(100)
+  semesterLevel  Int                    @map("semester_level")
+  hasLab         Boolean                @default(false) @map("has_lab")
+  labMarksWeight Int?                   @map("lab_marks_weight")
   studentRecords StudentSubjectRecord[]
   timetableSlots TimetableSlot[]
   labBatches     LabBatch[]
@@ -33,22 +33,23 @@ model GlobalConfig {
 }
 
 model Faculty {
-  facultyId       Int     @id @default(autoincrement()) @map("faculty_id")
-  name            String  @db.VarChar(100)
-  emailId         String  @unique(map: "email_id") @map("email_id") @db.VarChar(150)
-  designationRole String  @map("designation_role") @db.VarChar(30)
-  passwordHash    String  @default("") @map("password_hash") @db.VarChar(255)
-  isHod           Boolean @default(false) @map("is_hod")
-  timetableSlots       TimetableSlot[]
-  assignedGrievances   GrievanceTicket[]  @relation("GrievanceAuthority")
-  leaveAbsences        LeaveSubstitution[] @relation("AbsentFaculty")
-  leaveSubstitutions   LeaveSubstitution[] @relation("SubstituteFaculty")
-  labBatches           LabBatch[]
-  assignedLabSessions  LabSession[]       @relation("AssignedFaculty")
-  originalLabSessions  LabSession[]       @relation("OriginalFaculty")
-  labMarksUpdated      LabMark[]          @relation("LabMarkUpdatedBy")
-  aicteAwards          AictePoints[]
-  tgAssignments        TgAssignment[]
+  facultyId           Int                 @id @default(autoincrement()) @map("faculty_id")
+  name                String              @db.VarChar(100)
+  emailId             String              @unique(map: "email_id") @map("email_id") @db.VarChar(150)
+  designationRole     String              @map("designation_role") @db.VarChar(30)
+  passwordHash        String              @default("") @map("password_hash") @db.VarChar(255)
+  isAdmin             Boolean             @default(false) @map("is_admin")
+  isHod               Boolean             @default(false) @map("is_hod")
+  timetableSlots      TimetableSlot[]
+  assignedGrievances  GrievanceTicket[]   @relation("GrievanceAuthority")
+  leaveAbsences       LeaveSubstitution[] @relation("AbsentFaculty")
+  leaveSubstitutions  LeaveSubstitution[] @relation("SubstituteFaculty")
+  labBatches          LabBatch[]
+  assignedLabSessions LabSession[]        @relation("AssignedFaculty")
+  originalLabSessions LabSession[]        @relation("OriginalFaculty")
+  labMarksUpdated     LabMark[]           @relation("LabMarkUpdatedBy")
+  aicteAwards         AictePoints[]
+  tgAssignments       TgAssignment[]
 
   @@map("faculty")
 }
@@ -63,11 +64,11 @@ model AdminUser {
 }
 
 model Student {
-  uid             String @id @db.VarChar(30)
-  emailId         String @unique(map: "email_id") @map("email_id") @db.VarChar(150)
-  currentSemester Int    @map("current_semester")
-  academicYear    String @map("academic_year") @db.VarChar(10)
-  passwordHash    String @default("") @map("password_hash") @db.VarChar(255)
+  uid             String                 @id @db.VarChar(30)
+  emailId         String                 @unique(map: "email_id") @map("email_id") @db.VarChar(150)
+  currentSemester Int                    @map("current_semester")
+  academicYear    String                 @map("academic_year") @db.VarChar(10)
+  passwordHash    String                 @default("") @map("password_hash") @db.VarChar(255)
   subjectRecords  StudentSubjectRecord[]
   grievances      GrievanceTicket[]
   labAttendances  LabAttendance[]
@@ -84,8 +85,8 @@ model StudentSubjectRecord {
   subjectId  Int      @map("subject_id")
   status     String   @db.VarChar(10)
   marks      Decimal? @db.Decimal(5, 2)
-  student    Student  @relation(fields: [studentUid], references: [uid])
-  subject    Subject  @relation(fields: [subjectId], references: [subjectId])
+  student    Student  @relation(fields: [studentUid], references: [uid], onDelete: Cascade)
+  subject    Subject  @relation(fields: [subjectId], references: [subjectId], onDelete: Cascade)
 
   @@id([studentUid, subjectId])
   @@index([studentUid], map: "idx_ssr_student")
@@ -94,14 +95,14 @@ model StudentSubjectRecord {
 }
 
 model TimetableSlot {
-  slotId    Int      @id @default(autoincrement()) @map("slot_id")
-  dayOfWeek String   @map("day_of_week") @db.VarChar(10)
-  startTime DateTime @map("start_time") @db.Time(0)
-  endTime   DateTime @map("end_time") @db.Time(0)
-  subjectId Int      @map("subject_id")
-  facultyId Int      @map("faculty_id")
-  subject   Subject  @relation(fields: [subjectId], references: [subjectId])
-  faculty   Faculty  @relation(fields: [facultyId], references: [facultyId])
+  slotId    Int          @id @default(autoincrement()) @map("slot_id")
+  dayOfWeek String       @map("day_of_week") @db.VarChar(10)
+  startTime DateTime     @map("start_time") @db.Time(0)
+  endTime   DateTime     @map("end_time") @db.Time(0)
+  subjectId Int          @map("subject_id")
+  facultyId Int          @map("faculty_id")
+  subject   Subject      @relation(fields: [subjectId], references: [subjectId], onDelete: Restrict)
+  faculty   Faculty      @relation(fields: [facultyId], references: [facultyId], onDelete: Restrict)
   logs      LectureLog[]
 
   @@index([facultyId], map: "idx_slot_faculty")
@@ -110,12 +111,12 @@ model TimetableSlot {
 }
 
 model LectureLog {
-  logId                  Int      @id @default(autoincrement()) @map("log_id")
-  slotId                 Int      @map("slot_id")
-  syllabusTopicsTaught   String?  @map("syllabus_topics_taught") @db.Text
-  additionalTopicsTaught String?  @map("additional_topics_taught") @db.Text
-  executionDate          DateTime @map("execution_date") @db.Date
-  slot                   TimetableSlot @relation(fields: [slotId], references: [slotId])
+  logId                  Int           @id @default(autoincrement()) @map("log_id")
+  slotId                 Int           @map("slot_id")
+  syllabusTopicsTaught   String?       @map("syllabus_topics_taught") @db.Text
+  additionalTopicsTaught String?       @map("additional_topics_taught") @db.Text
+  executionDate          DateTime      @map("execution_date") @db.Date
+  slot                   TimetableSlot @relation(fields: [slotId], references: [slotId], onDelete: Cascade)
 
   @@unique([slotId, executionDate], map: "uq_log_slot_date")
   @@index([slotId], map: "idx_log_slot")
@@ -133,8 +134,8 @@ model GrievanceTicket {
   assignedAuthorityId Int?     @map("assigned_authority_id")
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamp(0)
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
-  student             Student  @relation(fields: [studentUid], references: [uid])
-  authority           Faculty? @relation("GrievanceAuthority", fields: [assignedAuthorityId], references: [facultyId])
+  student             Student  @relation(fields: [studentUid], references: [uid], onDelete: Cascade)
+  authority           Faculty? @relation("GrievanceAuthority", fields: [assignedAuthorityId], references: [facultyId], onDelete: Restrict)
 
   @@index([studentUid], map: "idx_grievance_student")
   @@index([status], map: "idx_grievance_status")
@@ -148,8 +149,8 @@ model LeaveSubstitution {
   substituteFacultyId Int      @map("substitute_faculty_id")
   leaveDate           DateTime @map("leave_date") @db.Date
   type                String   @db.VarChar(15)
-  absentFaculty       Faculty  @relation("AbsentFaculty", fields: [absentFacultyId], references: [facultyId])
-  substituteFaculty   Faculty  @relation("SubstituteFaculty", fields: [substituteFacultyId], references: [facultyId])
+  absentFaculty       Faculty  @relation("AbsentFaculty", fields: [absentFacultyId], references: [facultyId], onDelete: Restrict)
+  substituteFaculty   Faculty  @relation("SubstituteFaculty", fields: [substituteFacultyId], references: [facultyId], onDelete: Restrict)
 
   @@index([absentFacultyId], map: "idx_leave_absent")
   @@index([leaveDate], map: "idx_leave_date")
@@ -168,12 +169,12 @@ model NoticeBoard {
 }
 
 model LabBatch {
-  batchId   Int    @id @default(autoincrement()) @map("batch_id")
-  subjectId Int    @map("subject_id")
-  batchName String @map("batch_name") @db.VarChar(20)
-  facultyId Int    @map("faculty_id")
-  subject   Subject @relation(fields: [subjectId], references: [subjectId])
-  faculty   Faculty @relation(fields: [facultyId], references: [facultyId])
+  batchId   Int          @id @default(autoincrement()) @map("batch_id")
+  subjectId Int          @map("subject_id")
+  batchName String       @map("batch_name") @db.VarChar(20)
+  facultyId Int          @map("faculty_id")
+  subject   Subject      @relation(fields: [subjectId], references: [subjectId], onDelete: Cascade)
+  faculty   Faculty      @relation(fields: [facultyId], references: [facultyId], onDelete: Restrict)
   sessions  LabSession[]
 
   @@unique([subjectId, batchName], map: "uq_subject_batch")
@@ -182,12 +183,12 @@ model LabBatch {
 }
 
 model Experiment {
-  experimentId Int    @id @default(autoincrement()) @map("experiment_id")
-  subjectId    Int    @map("subject_id")
-  experimentNo Int    @map("experiment_no")
-  title        String @db.VarChar(255)
-  maxMarks     Int    @map("max_marks")
-  subject      Subject @relation(fields: [subjectId], references: [subjectId])
+  experimentId Int             @id @default(autoincrement()) @map("experiment_id")
+  subjectId    Int             @map("subject_id")
+  experimentNo Int             @map("experiment_no")
+  title        String          @db.VarChar(255)
+  maxMarks     Int             @map("max_marks")
+  subject      Subject         @relation(fields: [subjectId], references: [subjectId], onDelete: Cascade)
   labMarks     LabMark[]
   submissions  LabSubmission[]
 
@@ -196,18 +197,18 @@ model Experiment {
 }
 
 model LabSession {
-  sessionId         Int      @id @default(autoincrement()) @map("session_id")
-  subjectId         Int      @map("subject_id")
-  batchId           Int      @map("batch_id")
-  sessionDate       DateTime @map("session_date") @db.Date
-  assignedFacultyId Int      @map("assigned_faculty_id")
-  originalFacultyId Int?     @map("original_faculty_id")
-  isSubstitute      Boolean  @default(false) @map("is_substitute")
-  status            String   @default("Pending") @db.VarChar(15)
-  subject           Subject  @relation(fields: [subjectId], references: [subjectId])
-  batch             LabBatch @relation(fields: [batchId], references: [batchId])
-  assignedFaculty   Faculty  @relation("AssignedFaculty", fields: [assignedFacultyId], references: [facultyId])
-  originalFaculty   Faculty? @relation("OriginalFaculty", fields: [originalFacultyId], references: [facultyId])
+  sessionId         Int             @id @default(autoincrement()) @map("session_id")
+  subjectId         Int             @map("subject_id")
+  batchId           Int             @map("batch_id")
+  sessionDate       DateTime        @map("session_date") @db.Date
+  assignedFacultyId Int             @map("assigned_faculty_id")
+  originalFacultyId Int?            @map("original_faculty_id")
+  isSubstitute      Boolean         @default(false) @map("is_substitute")
+  status            String          @default("Pending") @db.VarChar(15)
+  subject           Subject         @relation(fields: [subjectId], references: [subjectId], onDelete: Restrict)
+  batch             LabBatch        @relation(fields: [batchId], references: [batchId], onDelete: Restrict)
+  assignedFaculty   Faculty         @relation("AssignedFaculty", fields: [assignedFacultyId], references: [facultyId], onDelete: Restrict)
+  originalFaculty   Faculty?        @relation("OriginalFaculty", fields: [originalFacultyId], references: [facultyId], onDelete: Restrict)
   attendances       LabAttendance[]
   labMarks          LabMark[]
 
@@ -219,61 +220,59 @@ model LabSession {
 }
 
 model LabAttendance {
-  attendanceId Int    @id @default(autoincrement()) @map("attendance_id")
-  sessionId    Int    @map("session_id")
-  studentUid   String @map("student_uid") @db.VarChar(30)
-  status       String @db.VarChar(10)
-  session      LabSession @relation(fields: [sessionId], references: [sessionId])
-  student      Student    @relation(fields: [studentUid], references: [uid])
+  attendanceId Int        @id @default(autoincrement()) @map("attendance_id")
+  sessionId    Int        @map("session_id")
+  studentUid   String     @map("student_uid") @db.VarChar(30)
+  status       String     @db.VarChar(10)
+  session      LabSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  student      Student    @relation(fields: [studentUid], references: [uid], onDelete: Cascade)
 
   @@unique([sessionId, studentUid], map: "uq_lab_attendance")
-  @@index([sessionId], map: "idx_lab_attendance_session")
-  @@index([studentUid], map: "fk_lab_attendance_student")
+  @@index([studentUid], map: "fk_la_student")
   @@index([sessionId], map: "idx_lab_att_sess")
   @@map("lab_attendance")
 }
 
 model LabMark {
-  markId         Int      @id @default(autoincrement()) @map("mark_id")
-  studentUid     String   @map("student_uid") @db.VarChar(30)
-  subjectId      Int      @map("subject_id")
-  experimentId   Int      @map("experiment_id")
-  sessionId      Int      @map("session_id")
-  vivaMarks      Decimal? @map("viva_marks") @db.Decimal(5, 2)
-  executionMarks Decimal? @map("execution_marks") @db.Decimal(5, 2)
-  journalMarks   Decimal? @map("journal_marks") @db.Decimal(5, 2)
-  totalMarks     Decimal? @map("total_marks") @db.Decimal(5, 2)
-  remarks        String?  @db.Text
-  updatedBy      Int?     @map("updated_by")
-  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
-  student        Student    @relation(fields: [studentUid], references: [uid])
-  subject        Subject    @relation(fields: [subjectId], references: [subjectId])
-  experiment     Experiment @relation(fields: [experimentId], references: [experimentId])
-  session        LabSession @relation(fields: [sessionId], references: [sessionId])
-  faculty        Faculty?   @relation("LabMarkUpdatedBy", fields: [updatedBy], references: [facultyId])
+  markId         Int        @id @default(autoincrement()) @map("mark_id")
+  studentUid     String     @map("student_uid") @db.VarChar(30)
+  subjectId      Int        @map("subject_id")
+  experimentId   Int        @map("experiment_id")
+  sessionId      Int        @map("session_id")
+  vivaMarks      Decimal?   @map("viva_marks") @db.Decimal(5, 2)
+  executionMarks Decimal?   @map("execution_marks") @db.Decimal(5, 2)
+  journalMarks   Decimal?   @map("journal_marks") @db.Decimal(5, 2)
+  totalMarks     Decimal?   @map("total_marks") @db.Decimal(5, 2)
+  remarks        String?    @db.Text
+  updatedBy      Int?       @map("updated_by")
+  updatedAt      DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+  student        Student    @relation(fields: [studentUid], references: [uid], onDelete: Cascade)
+  subject        Subject    @relation(fields: [subjectId], references: [subjectId], onDelete: Restrict)
+  experiment     Experiment @relation(fields: [experimentId], references: [experimentId], onDelete: Restrict)
+  session        LabSession @relation(fields: [sessionId], references: [sessionId], onDelete: Restrict)
+  faculty        Faculty?   @relation("LabMarkUpdatedBy", fields: [updatedBy], references: [facultyId], onDelete: Restrict)
 
   @@unique([studentUid, experimentId], map: "uq_lab_marks")
-  @@index([studentUid], map: "idx_lab_marks_student")
-  @@index([experimentId], map: "fk_lab_marks_experiment")
-  @@index([updatedBy], map: "fk_lab_marks_faculty")
-  @@index([sessionId], map: "fk_lab_marks_session")
-  @@index([subjectId], map: "fk_lab_marks_subject")
+  @@index([experimentId], map: "fk_lm_experiment")
+  @@index([updatedBy], map: "fk_lm_faculty")
+  @@index([sessionId], map: "fk_lm_session")
+  @@index([subjectId], map: "fk_lm_subject")
   @@index([studentUid], map: "idx_lab_marks_stu")
   @@map("lab_marks")
 }
 
 model LabSubmission {
-  submissionId Int      @id @default(autoincrement()) @map("submission_id")
-  studentUid   String   @map("student_uid") @db.VarChar(30)
-  experimentId Int      @map("experiment_id")
-  fileUrl      String?  @map("file_url") @db.Text
-  submittedAt  DateTime @default(now()) @map("submitted_at") @db.Timestamp(0)
-  status       String?  @db.VarChar(15)
-  student      Student    @relation(fields: [studentUid], references: [uid])
-  experiment   Experiment @relation(fields: [experimentId], references: [experimentId])
+  submissionId Int        @id @default(autoincrement()) @map("submission_id")
+  studentUid   String     @map("student_uid") @db.VarChar(30)
+  experimentId Int        @map("experiment_id")
+  fileUrl      String?    @map("file_url") @db.Text
+  submittedAt  DateTime   @default(now()) @map("submitted_at") @db.Timestamp(0)
+  status       String?    @db.VarChar(15)
+  student      Student    @relation(fields: [studentUid], references: [uid], onDelete: Restrict)
+  experiment   Experiment @relation(fields: [experimentId], references: [experimentId], onDelete: Restrict)
 
-  @@index([experimentId], map: "fk_submission_experiment")
-  @@index([studentUid], map: "fk_submission_student")
+  @@unique([studentUid, experimentId], map: "uq_lab_submission")
+  @@index([experimentId], map: "fk_ls_experiment")
   @@map("lab_submission")
 }
 
@@ -284,22 +283,22 @@ model AictePoints {
   points     Int
   awardedBy  Int      @map("awarded_by")
   awardedAt  DateTime @default(now()) @map("awarded_at") @db.Timestamp(0)
-  student    Student  @relation(fields: [studentUid], references: [uid])
-  faculty    Faculty  @relation(fields: [awardedBy], references: [facultyId])
+  student    Student  @relation(fields: [studentUid], references: [uid], onDelete: Cascade)
+  faculty    Faculty  @relation(fields: [awardedBy], references: [facultyId], onDelete: Restrict)
 
   @@index([studentUid], map: "idx_aicte_student")
-  @@index([awardedBy], map: "fk_aicte_faculty")
+  @@index([awardedBy], map: "fk_ap_faculty")
   @@index([studentUid], map: "idx_aicte_stu")
   @@map("aicte_points")
 }
 
 model TgAssignment {
-  assignmentId Int    @id @default(autoincrement()) @map("assignment_id")
-  facultyId    Int    @map("faculty_id")
-  studentUid   String @map("student_uid") @db.VarChar(30)
+  assignmentId Int     @id @default(autoincrement()) @map("assignment_id")
+  facultyId    Int     @map("faculty_id")
+  studentUid   String  @map("student_uid") @db.VarChar(30)
   semester     Int
-  faculty      Faculty @relation(fields: [facultyId], references: [facultyId])
-  student      Student @relation(fields: [studentUid], references: [uid])
+  faculty      Faculty @relation(fields: [facultyId], references: [facultyId], onDelete: Cascade)
+  student      Student @relation(fields: [studentUid], references: [uid], onDelete: Cascade)
 
   @@unique([facultyId, studentUid, semester], map: "uq_tga")
   @@index([facultyId], map: "idx_tga_faculty")
