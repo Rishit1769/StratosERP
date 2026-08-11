@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   try {
     const contentType = request.headers.get("content-type") || "";
 
-    let baseUrl = request.nextUrl.origin;
+    let baseUrl = process.env.INTERNAL_API_BASE_URL || "http://127.0.0.1:3005";
     let path: string | undefined;
     let method: HttpMethod = "GET";
     let token = "";
@@ -129,7 +129,10 @@ export async function POST(request: NextRequest) {
       upstreamBody = upstreamFormData;
     } else {
       const body = (await request.json()) as ProxyBody;
-      baseUrl = body.baseUrl?.trim() || request.nextUrl.origin;
+      baseUrl =
+        body.baseUrl?.trim() ||
+        process.env.INTERNAL_API_BASE_URL ||
+        "http://127.0.0.1:3005";
       path = body.path?.trim();
       method = body.method || "GET";
       token = body.token?.trim() || "";

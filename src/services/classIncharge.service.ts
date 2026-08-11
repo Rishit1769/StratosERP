@@ -82,6 +82,36 @@ export async function getStudentPortfolio(uid: string) {
     [uid]
   );
 
+  const aicte = await selectRows<DbRow>(
+    db,
+    `
+    SELECT ap.record_id, ap.activity, ap.points, ap.awarded_at, f.name AS awarded_by_name
+    FROM aicte_points ap
+    LEFT JOIN faculty f ON f.faculty_id = ap.awarded_by
+    WHERE ap.student_uid = ?
+    ORDER BY ap.awarded_at DESC
+    `,
+    [uid]
+  );
+
+  const contacts = await selectRows<DbRow>(
+    db,
+    `
+    SELECT
+      s.email_id AS student_email,
+      f.faculty_id AS tg_faculty_id,
+      f.name AS tg_name,
+      f.email_id AS tg_email,
+      f.designation_role AS tg_designation
+    FROM student s
+    LEFT JOIN tg_assignment tga ON tga.student_uid = s.uid
+    LEFT JOIN faculty f ON f.faculty_id = tga.faculty_id
+    WHERE s.uid = ?
+    LIMIT 1
+    `,
+    [uid]
+  );
+
   return {
     student,
     subjects: subjects.map((subject) => ({
@@ -91,8 +121,45 @@ export async function getStudentPortfolio(uid: string) {
       status: subject.status,
     })),
     grievances,
+    aicte_points: aicte.map((record) => ({
+      record_id: record.record_id,
+      activity: record.activity,
+      points: record.points,
+      awarded_at: record.awarded_at,
+      awarded_by_name: record.awarded_by_name ?? null,
+    })),
+    contacts: contacts[0] ?? null,
     backlog_count: subjects.filter((subject) => ["KT", "SUPPLI"].includes(String(subject.status))).length,
   };
+}
+
+export async function getAICTETracker(): Promise<Record<string, unknown>[]> {
+  const rows = await selectRows<DbRow>(
+    db,
+    `
+    SELECT
+      s.uid,
+      s.email_id,
+      s.current_semester,
+      s.academic_year,
+      COALESCE(SUM(ap.points), 0) AS total_points,
+      COUNT(ap.record_id) AS activities
+    FROM student s
+    LEFT JOIN aicte_points ap ON ap.student_uid = s.uid
+    WHERE s.academic_year <> 'Alumni'
+    GROUP BY s.uid, s.email_id, s.current_semester, s.academic_year
+    ORDER BY total_points DESC, s.uid ASC
+    `
+  );
+
+  return rows.map((row) => ({
+    uid: row.uid,
+    email_id: row.email_id,
+    current_semester: row.current_semester,
+    academic_year: row.academic_year,
+    total_points: Number(row.total_points ?? 0),
+    activities: Number(row.activities ?? 0),
+  }));
 }
 
 export async function getAllStudents() {

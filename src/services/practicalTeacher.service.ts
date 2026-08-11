@@ -276,3 +276,83 @@ export async function upsertSubmission(data: {
     [data.student_uid, data.experiment_id, data.file_url || null, data.status]
   );
 }
+
+export async function generateLabInsights(facultyId: number): Promise<Record<string, unknown>> {
+  const sessions = await getAssignedSessions(facultyId);
+
+  const marksRows = await selectRows<Record<string, unknown>>(
+    db,
+    `
+    SELECT
+      lm.student_uid,
+      s.email_id,
+      e.title AS experiment_title,
+      lm.viva_marks,
+      lm.execution_marks,
+      lm.journal_marks,
+      lm.total_marks
+    FROM lab_marks lm
+    JOIN lab_session ls ON ls.session_id = lm.session_id
+    JOIN experiment e ON e.experiment_id = lm.experiment_id
+    JOIN student s ON s.uid = lm.student_uid
+    WHERE ls.assigned_faculty_id = ?
+    ORDER BY lm.student_uid ASC, e.experiment_no ASC
+    `,
+    [facultyId]
+  );
+
+  const attendanceRows = await selectRows<Record<string, unknown>>(
+    db,
+    `
+    SELECT la.student_uid, s.email_id, la.status, COUNT(*) AS sessions_attended
+    FROM lab_attendance la
+    JOIN lab_session ls ON ls.session_id = la.session_id
+    JOIN student s ON s.uid = la.student_uid
+    WHERE ls.assigned_faculty_id = ?
+      AND la.status = 'Present'
+    GROUP BY la.student_uid, s.email_id, la.status
+    ORDER BY sessions_attended DESC
+    `,
+    [facultyId]
+  );
+
+  const totalSessions = sessions.length;
+  const summary = {
+    total_sessions: totalSessions,
+    completed_sessions: sessions.filter((session) => session.status === "Completed").length,
+    locked_sessions: sessions.filter((session) => session.status === "Locked").length,
+    students_evaluated: new Set(marksRows.map((row) => String(row.student_uid))).size,
+    students_present: attendanceRows.length,
+  };
+
+  const prompt = `You are a lab performance analyst for a college ERP.
+Analyze the practical session data below and respond ONLY in JSON:
+{
+  "insights": ["2-3 bullet insights about overall lab performance"],
+  "weak_students": ["UIDs of students with low marks or irregular attendance"],
+  "attendance_flags": ["UIDs of students missing sessions"],
+  "recommendations": ["2-3 actionable recommendations for the lab instructor"]
+}
+
+Sessions: ${JSON.stringify(summary)}
+Marks: ${JSON.stringify(marksRows.slice(0, 40))}
+Attendance: ${JSON.stringify(attendanceRows.slice(0, 40))}`;
+
+  try {
+    const { getGeminiModel } = await import("@/lib/notifications/gemini");
+    const model = getGeminiModel();
+    const result = await model.generateContent(prompt);
+    const text = result.response.text().trim();
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+    return { summary, ...parsed };
+  } catch {
+    return {
+      summary,
+      insights: ["AI insights unavailable — review marks and attendance directly."],
+      weak_students: [],
+      attendance_flags: [],
+      recommendations: [],
+    };
+  }
+}

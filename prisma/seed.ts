@@ -205,6 +205,142 @@ async function seedStudent(passwordHash: string, stats: SeedStats): Promise<void
   stats.created.push(`student ${seedUsers.student.emailId}`);
 }
 
+async function seedDemoData(stats: SeedStats): Promise<void> {
+  // Default global semester configuration with institutional thresholds
+  const existingConfig = await prisma.globalConfig.findFirst({ select: { configId: true } });
+  if (!existingConfig) {
+    await prisma.globalConfig.create({
+      data: {
+        activeSemesterType: "ODD",
+        startDate: new Date("2026-07-15"),
+        endDate: new Date("2026-12-10"),
+        maxAictePoints: 100,
+        minAttendancePct: 75,
+      },
+    });
+    stats.created.push("global_config (ODD 2026-07-15 → 2026-12-10, max AICTE 100, min attendance 75%)");
+  } else {
+    stats.skipped.push("global_config (already present)");
+  }
+
+  // Reference subject so Subject Incharge / student / lab flows have data
+  let subject = await prisma.subject.findFirst({ where: { name: "Data Structures" }, select: { subjectId: true } });
+  if (!subject) {
+    subject = await prisma.subject.create({
+      data: { name: "Data Structures", semesterLevel: 5, hasLab: true, labMarksWeight: 30 },
+      select: { subjectId: true },
+    });
+    stats.created.push("subject Data Structures (semester 5, has lab)");
+  }
+
+  const subjectId = subject.subjectId;
+  const subjectIncharge = await prisma.faculty.findUnique({
+    where: { emailId: "subjectinchargecomp@tcetmumbai.in" },
+    select: { facultyId: true },
+  });
+  const teacherGuardian = await prisma.faculty.findUnique({
+    where: { emailId: "teacherguardiancomp@tcetmumbai.in" },
+    select: { facultyId: true },
+  });
+  const student = await prisma.student.findUnique({
+    where: { uid: "STUDENT-COMP-001" },
+    select: { uid: true },
+  });
+
+  if (student && subjectIncharge) {
+    // Enroll seeded student in the subject
+    const existingRecord = await prisma.studentSubjectRecord.findUnique({
+      where: { studentUid_subjectId: { studentUid: student.uid, subjectId } },
+      select: { studentUid: true },
+    });
+    if (!existingRecord) {
+      await prisma.studentSubjectRecord.create({
+        data: { studentUid: student.uid, subjectId, status: "Active", marks: null },
+      });
+      stats.created.push(`enrollment STUDENT-COMP-001 → Data Structures`);
+    }
+
+    // Timetable slot on Monday so attendance / active-slot / timetable flows work
+    const existingSlot = await prisma.timetableSlot.findFirst({
+      where: { subjectId, facultyId: subjectIncharge.facultyId },
+      select: { slotId: true },
+    });
+    if (!existingSlot) {
+      await prisma.timetableSlot.create({
+        data: {
+          dayOfWeek: "Monday",
+          startTime: new Date("1970-01-01T09:00:00Z"),
+          endTime: new Date("1970-01-01T10:00:00Z"),
+          subjectId,
+          facultyId: subjectIncharge.facultyId,
+        },
+      });
+      stats.created.push("timetable slot Monday 09:00–10:00 (Data Structures)");
+    }
+
+    // Lab experiment + batch + session so Practical Teacher flows have data
+    const existingExperiment = await prisma.experiment.findFirst({
+      where: { subjectId, experimentNo: 1 },
+      select: { experimentId: true },
+    });
+    if (!existingExperiment) {
+      await prisma.experiment.create({
+        data: { subjectId, experimentNo: 1, title: "Stacks & Recursion Basics", maxMarks: 30 },
+      });
+      stats.created.push("experiment 1 Stacks & Recursion Basics");
+    }
+
+    const existingBatch = await prisma.labBatch.findFirst({
+      where: { subjectId, batchName: "A1" },
+      select: { batchId: true },
+    });
+    if (!existingBatch) {
+      await prisma.labBatch.create({
+        data: { subjectId, batchName: "A1", facultyId: subjectIncharge.facultyId },
+      });
+      stats.created.push("lab batch A1");
+    }
+
+    const batch = existingBatch ?? (await prisma.labBatch.findFirst({
+      where: { subjectId, batchName: "A1" },
+      select: { batchId: true },
+    }));
+    if (batch) {
+      const today = new Date();
+      const existingSession = await prisma.labSession.findFirst({
+        where: { subjectId, batchId: batch.batchId, sessionDate: today },
+        select: { sessionId: true },
+      });
+      if (!existingSession) {
+        await prisma.labSession.create({
+          data: {
+            subjectId,
+            batchId: batch.batchId,
+            sessionDate: today,
+            assignedFacultyId: subjectIncharge.facultyId,
+            status: "Pending",
+          },
+        });
+        stats.created.push("lab session today (Pending)");
+      }
+    }
+  }
+
+  if (student && teacherGuardian) {
+    // TG assignment so mentee flows work
+    const existingAssignment = await prisma.tgAssignment.findUnique({
+      where: { facultyId_studentUid_semester: { facultyId: teacherGuardian.facultyId, studentUid: student.uid, semester: 5 } },
+      select: { assignmentId: true },
+    });
+    if (!existingAssignment) {
+      await prisma.tgAssignment.create({
+        data: { facultyId: teacherGuardian.facultyId, studentUid: student.uid, semester: 5 },
+      });
+      stats.created.push("TG assignment teacherguardiancomp → STUDENT-COMP-001");
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const stats: SeedStats = {
     created: [],
@@ -218,6 +354,7 @@ async function main(): Promise<void> {
   await seedAdmin(passwordHash, stats);
   await seedFaculty(passwordHash, stats);
   await seedStudent(passwordHash, stats);
+  await seedDemoData(stats);
 
   logStats(stats);
   console.log("[seed] completed successfully");

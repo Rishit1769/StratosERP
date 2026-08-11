@@ -19,6 +19,7 @@ model Subject {
   experiments    Experiment[]
   labSessions    LabSession[]
   labMarks       LabMark[]
+  materials      StudyMaterial[]
 
   @@map("subject")
 }
@@ -28,6 +29,8 @@ model GlobalConfig {
   activeSemesterType String   @map("active_semester_type") @db.VarChar(4)
   startDate          DateTime @map("start_date") @db.Date
   endDate            DateTime @map("end_date") @db.Date
+  maxAictePoints     Int      @default(100) @map("max_aicte_points")
+  minAttendancePct   Int      @default(75) @map("min_attendance_percent")
 
   @@map("global_config")
 }
@@ -50,6 +53,7 @@ model Faculty {
   labMarksUpdated     LabMark[]           @relation("LabMarkUpdatedBy")
   aicteAwards         AictePoints[]
   tgAssignments       TgAssignment[]
+  uploadedMaterials   StudyMaterial[] @relation("StudyMaterialUploader")
 
   @@map("faculty")
 }
@@ -69,6 +73,7 @@ model Student {
   currentSemester Int                    @map("current_semester")
   academicYear    String                 @map("academic_year") @db.VarChar(10)
   passwordHash    String                 @default("") @map("password_hash") @db.VarChar(255)
+  feeStatus       String                 @default("CLEAR") @map("fee_status") @db.VarChar(20)
   subjectRecords  StudentSubjectRecord[]
   grievances      GrievanceTicket[]
   labAttendances  LabAttendance[]
@@ -306,4 +311,21 @@ model TgAssignment {
   @@index([facultyId], map: "idx_tga_fac")
   @@index([studentUid], map: "idx_tga_stu")
   @@map("tg_assignment")
+}
+
+model StudyMaterial {
+  materialId Int      @id @default(autoincrement()) @map("material_id")
+  subjectId  Int      @map("subject_id")
+  fileKey    String   @map("file_key") @db.VarChar(500)
+  fileName   String   @map("file_name") @db.VarChar(255)
+  fileType   String?  @map("file_type") @db.VarChar(100)
+  bucketName String   @default("study-materials") @map("bucket_name") @db.VarChar(100)
+  uploadedBy Int?     @map("uploaded_by")
+  uploadedAt DateTime @default(now()) @map("uploaded_at") @db.Timestamp(0)
+  subject    Subject  @relation(fields: [subjectId], references: [subjectId], onDelete: Cascade)
+  faculty    Faculty? @relation("StudyMaterialUploader", fields: [uploadedBy], references: [facultyId], onDelete: SetNull)
+
+  @@index([subjectId], map: "idx_material_subject")
+  @@index([uploadedBy], map: "idx_material_uploader")
+  @@map("study_material")
 }

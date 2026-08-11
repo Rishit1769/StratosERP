@@ -45,17 +45,26 @@ function isYearBack(academicYear: string, currentSemester: number): boolean {
 export async function getGlobalConfig() {
   return selectOne(
     db,
-    "SELECT config_id, active_semester_type, start_date, end_date FROM global_config ORDER BY config_id DESC LIMIT 1"
+    "SELECT config_id, active_semester_type, start_date, end_date, max_aicte_points, min_attendance_percent FROM global_config ORDER BY config_id DESC LIMIT 1"
   );
 }
 
-export async function setGlobalConfig(semesterType: SemesterType, startDate: string, endDate: string) {
+export async function setGlobalConfig(
+  semesterType: SemesterType,
+  startDate: string,
+  endDate: string,
+  maxAictePoints = 100,
+  minAttendancePercent = 75
+) {
   return withTransaction(async (connection) => {
     await run(connection, "DELETE FROM global_config");
     const result = await run(
       connection,
-      "INSERT INTO global_config (active_semester_type, start_date, end_date) VALUES (?, ?, ?)",
-      [semesterType, startDate, endDate]
+      `
+      INSERT INTO global_config (active_semester_type, start_date, end_date, max_aicte_points, min_attendance_percent)
+      VALUES (?, ?, ?, ?, ?)
+      `,
+      [semesterType, startDate, endDate, maxAictePoints, minAttendancePercent]
     );
     return result.insertId;
   });
@@ -471,7 +480,9 @@ export async function listAllFaculty() {
 }
 
 export async function listAllStudents(page = 1, limit = 50) {
-  const offset = (page - 1) * limit;
+  const safePage = Math.max(1, Number(page) || 1);
+  const safeLimit = Math.min(500, Math.max(1, Number(limit) || 50));
+  const offset = (safePage - 1) * safeLimit;
   const [students, total] = await Promise.all([
     selectRows(
       db,
@@ -479,14 +490,13 @@ export async function listAllStudents(page = 1, limit = 50) {
       SELECT uid, email_id AS emailId, current_semester AS currentSemester, academic_year AS academicYear
       FROM student
       ORDER BY uid ASC
-      LIMIT ? OFFSET ?
-      `,
-      [limit, offset]
+      LIMIT ${safeLimit} OFFSET ${offset}
+      `
     ),
     selectOne<{ total: number }>(db, "SELECT COUNT(*) AS total FROM student"),
   ]);
 
-  return { students, total: total?.total ?? 0, page, limit };
+  return { students, total: total?.total ?? 0, page: safePage, limit: safeLimit };
 }
 
 export async function getAlumniRecords() {

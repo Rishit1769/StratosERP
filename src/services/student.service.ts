@@ -12,7 +12,7 @@ export async function getStudentDashboard(uid: string) {
   const student = await selectOne<DbRow>(
     db,
     `
-    SELECT uid, email_id, current_semester, academic_year
+    SELECT uid, email_id, current_semester, academic_year, fee_status
     FROM student
     WHERE uid = ?
     LIMIT 1
@@ -53,6 +53,7 @@ export async function getStudentDashboard(uid: string) {
       emailId: student.email_id,
       currentSemester: student.current_semester,
       academicYear: student.academic_year,
+      feeStatus: student.fee_status || "CLEAR",
     },
     progression_status: {
       has_kt: hasKt,
@@ -197,10 +198,8 @@ export async function getNotices() {
 }
 
 export async function getStudyMaterials(subjectId: number) {
-  return {
-    subject_id: subjectId,
-    note: "Use /api/student/materials/:subject_id/download endpoint with object_name param.",
-  };
+  const { listMaterialsBySubject } = await import("@/services/materials.service");
+  return listMaterialsBySubject(subjectId);
 }
 
 export async function getLabMarks(uid: string) {

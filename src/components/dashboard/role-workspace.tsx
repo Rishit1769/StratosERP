@@ -81,7 +81,7 @@ const CSV_TEMPLATES: Record<string, string> = {
     "name,semester_level,has_lab,lab_marks_weight\nData Structures,3,true,30\n",
   "admin-ingest-timetable":
     "day_of_week,start_time,end_time,subject_id,faculty_id\nMonday,09:00:00,10:00:00,1,1\n",
-  "admin-config-set": "active_semester_type,start_date,end_date\nODD,2026-07-15,2026-12-10\n",
+  "admin-config-set": "active_semester_type,start_date,end_date,max_aicte_points,min_attendance_percent\nODD,2026-07-15,2026-12-10,100,75\n",
   "admin-exam-seating": "room,capacity\nA-301,60\nA-302,48\n",
   "admin-invigilation": "exam_date\n2026-05-25\n",
   "admin-notice-create":
@@ -379,7 +379,7 @@ function buildSections(role: RoleBlueprint): SidebarSection[] {
         id: "insights",
         title: "Insights",
         detail: "Department performance and student visibility",
-        actionIds: ["hod-analytics", "hod-track-student", "hod-alumni"],
+        actionIds: ["hod-analytics", "hod-track-student", "hod-alumni", "hod-materials"],
       },
       {
         id: "faculty-management",
@@ -408,7 +408,7 @@ function buildSections(role: RoleBlueprint): SidebarSection[] {
         id: "class-analytics",
         title: "Class Analytics",
         detail: "Performance overview and student risk monitoring",
-        actionIds: ["ci-analytics", "ci-risk", "ci-students"],
+        actionIds: ["ci-analytics", "ci-risk", "ci-students", "ci-aicte-tracker"],
       },
       {
         id: "student-support",
@@ -426,7 +426,7 @@ function buildSections(role: RoleBlueprint): SidebarSection[] {
         id: "communication",
         title: "Communication",
         detail: "Class notice publishing and review",
-        actionIds: ["ci-notice", "ci-notice-list"],
+        actionIds: ["ci-notice", "ci-notice-list", "ci-materials"],
       },
     ];
   }
@@ -466,7 +466,7 @@ function buildSections(role: RoleBlueprint): SidebarSection[] {
         id: "sessions",
         title: "Session Management",
         detail: "Create, complete and lock practical sessions",
-        actionIds: ["pt-sessions", "pt-create-session", "pt-complete-session", "pt-lock-session"],
+        actionIds: ["pt-sessions", "pt-create-session", "pt-complete-session", "pt-lock-session", "pt-insights"],
       },
       {
         id: "attendance-marks",
@@ -592,7 +592,7 @@ function buildSections(role: RoleBlueprint): SidebarSection[] {
       id: "records",
       title: "Records",
       detail: "Faculty, students and alumni data",
-      actionIds: ["admin-faculty-list", "admin-students-list", "admin-alumni-list"],
+      actionIds: ["admin-faculty-list", "admin-students-list", "admin-alumni-list", "admin-materials-list"],
     },
   ];
 }
@@ -1223,7 +1223,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
         ) : null}
 
         {selectedSectionId === "semester" ? (
-          <article className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+          <article className="mt-5 rounded-none border border-zinc-200 bg-zinc-50 p-4">
             <h2 className="text-lg font-semibold text-zinc-900">Semester Progression Board</h2>
             <p className="mt-1 text-sm text-zinc-600">
               Manage each academic year separately. Odd cycle promotes to next semester, even cycle promotes to next year, and Semester 8 even cycle moves eligible students to alumni.
@@ -1234,7 +1234,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                 type="button"
                 onClick={() => void loadProgressionBoard()}
                 disabled={progressionLoading}
-                className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-500"
+                className="rounded-none bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-500"
               >
                 {progressionLoading ? "Refreshing..." : "Refresh Board"}
               </button>
@@ -1248,7 +1248,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
             </div>
 
             {progressionFeedback ? (
-              <p className="mt-4 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700">
+              <p className="mt-4 rounded-none border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700">
                 {progressionFeedback}
               </p>
             ) : null}
@@ -1258,7 +1258,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                 {progressionBoard.years.map((row) => {
                   const isBusy = promotingYear === row.academic_year;
                   return (
-                    <div key={row.academic_year} className="rounded-2xl border border-zinc-200 bg-white p-4">
+                    <div key={row.academic_year} className="rounded-none border border-zinc-200 bg-white p-4">
                       <div className="flex items-center justify-between gap-3">
                         <h3 className="text-base font-semibold text-zinc-900">{row.academic_year} Year</h3>
                         <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-semibold text-zinc-700">
@@ -1267,25 +1267,25 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                       </div>
 
                       <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-2">
+                        <div className="rounded-none border border-zinc-200 bg-zinc-50 p-2">
                           <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Sem {row.odd_semester}</p>
                           <p className="mt-1 font-semibold text-zinc-900">{row.odd_strength} students</p>
-                          <p className="text-xs text-rose-700">Blocked: {row.odd_blocked}</p>
+                          <p className="text-xs text-zinc-500">Blocked: {row.odd_blocked}</p>
                         </div>
-                        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-2">
+                        <div className="rounded-none border border-zinc-200 bg-zinc-50 p-2">
                           <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">Sem {row.even_semester}</p>
                           <p className="mt-1 font-semibold text-zinc-900">{row.even_strength} students</p>
-                          <p className="text-xs text-rose-700">Blocked: {row.even_blocked}</p>
+                          <p className="text-xs text-zinc-500">Blocked: {row.even_blocked}</p>
                         </div>
                       </div>
 
-                      <p className="mt-3 text-xs text-amber-700">Year Back: {row.year_back_count}</p>
+                      <p className="mt-3 text-xs text-zinc-600">Year Back: {row.year_back_count}</p>
 
                       <button
                         type="button"
                         onClick={() => void promoteYear(row)}
                         disabled={isBusy || progressionLoading}
-                        className="mt-3 w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-500"
+                        className="mt-3 w-full rounded-none bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-500"
                       >
                         {isBusy ? "Processing..." : row.next_action_label}
                       </button>
@@ -1298,7 +1298,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
         ) : null}
 
         {selectedSectionId === "records" ? (
-          <article className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+          <article className="mt-5 rounded-none border border-zinc-200 bg-zinc-50 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-zinc-900">Live Institutional Metrics</h2>
@@ -1310,13 +1310,13 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                   const analyticsAction = actionById["admin-analytics"];
                   if (analyticsAction) void runAction(analyticsAction);
                 }}
-                className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700"
+                className="rounded-none bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700"
               >
                 Refresh Metrics
               </button>
             </div>
             {analyticsBars.length > 0 ? (
-              <div className="mono-response mt-4 h-80 rounded-2xl border border-zinc-200 bg-white p-3">
+              <div className="mono-response mt-4 h-80 rounded-none border border-zinc-200 bg-white p-3">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={analyticsBars}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -1328,7 +1328,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <p className="mt-4 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-600">
+              <p className="mt-4 rounded-none border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-600">
                 Use Refresh Metrics to load chart data.
               </p>
             )}
@@ -1336,7 +1336,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
         ) : null}
 
         {selectedSectionId === "notices" ? (
-          <article className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+          <article className="mt-5 rounded-none border border-zinc-200 bg-zinc-50 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-zinc-900">Notice Composer</h2>
@@ -1346,7 +1346,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                 <button
                   type="button"
                   onClick={() => setNoticeMode("manual")}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`rounded-none px-3 py-1.5 text-xs font-semibold transition ${
                     noticeMode === "manual"
                       ? "bg-zinc-900 text-white"
                       : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
@@ -1357,7 +1357,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                 <button
                   type="button"
                   onClick={() => setNoticeMode("ai")}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  className={`rounded-none px-3 py-1.5 text-xs font-semibold transition ${
                     noticeMode === "ai"
                       ? "bg-zinc-900 text-white"
                       : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
@@ -1380,7 +1380,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                         title: event.target.value,
                       }))
                     }
-                    className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                    className="mt-2 w-full rounded-none border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
                     placeholder="Notice title"
                   />
                 </label>
@@ -1394,7 +1394,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                         target_audience: event.target.value,
                       }))
                     }
-                    className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                    className="mt-2 w-full rounded-none border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
                   >
                     <option value="INSTITUTE">INSTITUTE</option>
                     <option value="BRANCH">BRANCH</option>
@@ -1410,7 +1410,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                         ai_filter_tags: event.target.value,
                       }))
                     }
-                    className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                    className="mt-2 w-full rounded-none border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
                     placeholder="ACADEMIC, IMPORTANT"
                   />
                 </label>
@@ -1428,7 +1428,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                       }))
                     }
                     rows={5}
-                    className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                    className="mt-2 w-full rounded-none border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
                     placeholder="Describe the notice to generate"
                   />
                 </label>
@@ -1442,7 +1442,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                         target_audience: event.target.value,
                       }))
                     }
-                    className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                    className="mt-2 w-full rounded-none border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
                   >
                     <option value="INSTITUTE">INSTITUTE</option>
                     <option value="BRANCH">BRANCH</option>
@@ -1456,7 +1456,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                 type="button"
                 onClick={() => void submitNotice()}
                 disabled={noticeSubmitting}
-                className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-500"
+                className="rounded-none bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-500"
               >
                 {noticeSubmitting ? "Submitting..." : "Publish Notice"}
               </button>
@@ -1482,7 +1482,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
             const hasComplexBody = Boolean(action.body) && fieldSpecs.length !== Object.keys(action.body || {}).length;
 
             return (
-              <article key={action.id} className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+              <article key={action.id} className="rounded-none border border-zinc-200 bg-zinc-50 p-4">
                 <h2 className="text-lg font-semibold text-zinc-900">{action.label}</h2>
                 <p className="mt-1 text-sm text-zinc-600">{action.description}</p>
 
@@ -1511,7 +1511,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                                       },
                                     }))
                                   }
-                                  className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                                  className="mt-2 w-full rounded-none border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
                                 >
                                   <option value="true">True</option>
                                   <option value="false">False</option>
@@ -1530,7 +1530,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                                     }))
                                   }
                                   placeholder={field.inputType === "list" ? "Value 1, Value 2" : "Enter value"}
-                                  className="mt-2 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
+                                  className="mt-2 w-full rounded-none border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-500"
                                 />
                               )}
                             </label>
@@ -1540,18 +1540,18 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                     ) : null}
 
                     {hasComplexBody ? (
-                      <p className="mt-3 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600">
+                      <p className="mt-3 rounded-none border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-600">
                         This action includes structured data. Use CSV Assist below to fill it quickly without JSON editing.
                       </p>
                     ) : null}
 
-                    <div className="mt-3 rounded-xl border border-zinc-200 bg-white p-3">
+                    <div className="mt-3 rounded-none border border-zinc-200 bg-white p-3">
                       <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">CSV Assist</p>
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           onClick={() => downloadTemplate(action)}
-                          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-100"
+                          className="rounded-none border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-100"
                         >
                           Download Template CSV
                         </button>
@@ -1564,12 +1564,12 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                               [action.id]: event.target.files?.[0] || null,
                             }))
                           }
-                          className="block w-full max-w-xs cursor-pointer rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs text-zinc-900"
+                          className="block w-full max-w-xs cursor-pointer rounded-none border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs text-zinc-900"
                         />
                         <button
                           type="button"
                           onClick={() => void convertCsvToJson(action)}
-                          className="rounded-lg bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-zinc-700"
+                          className="rounded-none bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-zinc-700"
                         >
                           Apply CSV Data
                         </button>
@@ -1582,7 +1582,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                 ) : null}
 
                 {action.transport === "multipart" || action.transport === "direct-upload" ? (
-                  <div className="mt-4 rounded-xl border border-zinc-200 bg-white p-3">
+                  <div className="mt-4 rounded-none border border-zinc-200 bg-white p-3">
                     <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">
                       {action.transport === "direct-upload" ? "Direct File Upload" : "CSV Upload"}
                     </p>
@@ -1591,7 +1591,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                         <button
                           type="button"
                           onClick={() => downloadTemplate(action)}
-                          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-100"
+                          className="rounded-none border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-100"
                         >
                           Download Template CSV
                         </button>
@@ -1605,7 +1605,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                             [action.id]: event.target.files?.[0] || null,
                           }))
                         }
-                        className="block w-full max-w-xs cursor-pointer rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs text-zinc-900"
+                        className="block w-full max-w-xs cursor-pointer rounded-none border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs text-zinc-900"
                       />
                     </div>
                     <p className="mt-2 text-xs text-zinc-500">
@@ -1623,13 +1623,13 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                     type="button"
                     onClick={() => void runAction(action)}
                     disabled={state?.loading}
-                    className="rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-500"
+                    className="rounded-none bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-500"
                   >
                     {state?.loading ? "Running..." : "Execute"}
                   </button>
 
                   {state?.ok !== undefined ? (
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${state.ok ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${state.ok ? "border border-zinc-300 text-zinc-700" : "border border-zinc-300 text-zinc-700"}`}>
                       {state.ok ? "Success" : "Failed"}
                     </span>
                   ) : null}
@@ -1642,11 +1642,11 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                 </div>
 
                 {state?.error ? (
-                  <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">{state.error}</p>
+                  <p className="mt-3 rounded-none border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700">{state.error}</p>
                 ) : null}
 
                 {state?.payload !== undefined ? (
-                  <div className="mt-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
+                  <div className="mt-3 rounded-none border border-zinc-200 bg-zinc-50 p-3">
                     <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">Response</p>
                     <div className="mt-2">{renderPayloadData(state.payload)}</div>
                   </div>
@@ -1656,7 +1656,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
           })}
 
           {visibleActions.length === 0 ? (
-            <p className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-600">
+            <p className="rounded-none border border-zinc-200 bg-zinc-50 px-4 py-6 text-center text-sm text-zinc-600">
               No functionality found in this section.
             </p>
           ) : null}

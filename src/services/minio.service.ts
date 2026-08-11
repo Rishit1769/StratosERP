@@ -1,4 +1,4 @@
-import minioClient, { BUCKETS, MINIO_PUBLIC_BASE_URL, isMinioAvailable } from '@/lib/storage/minio';
+import minioClient, { BUCKETS, MINIO_PUBLIC_BASE_URL, isMinioAvailable, ensureBucketsExist } from '@/lib/storage/minio';
 import { Readable } from 'stream';
 
 const PRESIGNED_URL_EXPIRY_SECONDS = 60 * 15;
@@ -20,8 +20,20 @@ export class MinioUnavailableError extends Error {
   }
 }
 
-function assertMinioAvailable(): void {
-  if (!isMinioAvailable()) {
+/**
+ * Ensures MinIO is initialized. The availability flag lives in module scope,
+ * so it must be set from within THIS module's bundle — doing it from
+ * instrumentation.ts sets a flag in a separate module instance and storage
+ * operations would still throw. Lazy-init here keeps it idempotent and cheap
+ * (bucketExists calls) after the first successful run.
+ */
+async function assertMinioAvailable(): Promise<void> {
+  if (isMinioAvailable()) {
+    return;
+  }
+
+  const ok = await ensureBucketsExist();
+  if (!ok) {
     throw new MinioUnavailableError();
   }
 }
@@ -84,7 +96,7 @@ export async function uploadStudyMaterial(
   objectName: string,
   contentType: string
 ): Promise<string> {
-  assertMinioAvailable();
+  await assertMinioAvailable();
   const stream = Readable.from(buffer);
   await minioClient.putObject(BUCKETS.STUDY_MATERIALS, objectName, stream, buffer.length, {
     'Content-Type': contentType,
@@ -97,7 +109,7 @@ export async function uploadNotice(
   objectName: string,
   contentType: string
 ): Promise<string> {
-  assertMinioAvailable();
+  await assertMinioAvailable();
   const stream = Readable.from(buffer);
   await minioClient.putObject(BUCKETS.NOTICES, objectName, stream, buffer.length, {
     'Content-Type': contentType,
@@ -110,7 +122,7 @@ export async function uploadSubmission(
   objectName: string,
   contentType: string
 ): Promise<string> {
-  assertMinioAvailable();
+  await assertMinioAvailable();
   const stream = Readable.from(buffer);
   await minioClient.putObject(BUCKETS.SUBMISSIONS, objectName, stream, buffer.length, {
     'Content-Type': contentType,
@@ -123,7 +135,7 @@ export async function getPresignedDownloadUrl(
   bucket: string = BUCKETS.STUDY_MATERIALS,
   expirySeconds: number = 3600
 ): Promise<string> {
-  assertMinioAvailable();
+  await assertMinioAvailable();
   const url = await minioClient.presignedGetObject(bucket, objectName, expirySeconds);
   return toPublicPresignedUrl(url);
 }
@@ -134,7 +146,7 @@ export async function generatePresignedObjectUrl({
   fileName,
   userId,
 }: PresignedUrlRequest): Promise<{ fileKey: string; bucketName: string; url: string }> {
-  assertMinioAvailable();
+  await assertMinioAvailable();
 
   const resolvedBucketName = resolveBucketName(bucketName);
   const fileKey = buildObjectKey(userId, fileName);
@@ -151,12 +163,12 @@ export async function generatePresignedObjectUrl({
 }
 
 export async function deleteObject(bucket: string, objectName: string): Promise<void> {
-  assertMinioAvailable();
+  await assertMinioAvailable();
   await minioClient.removeObject(bucket, objectName);
 }
 
 export async function listObjects(bucket: string, prefix?: string): Promise<string[]> {
-  assertMinioAvailable();
+  await assertMinioAvailable();
   return new Promise((resolve, reject) => {
     const objects: string[] = [];
     const stream = minioClient.listObjects(bucket, prefix || '', true);

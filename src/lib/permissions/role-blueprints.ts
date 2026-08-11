@@ -59,13 +59,15 @@ export const roleBlueprints: RoleBlueprint[] = [
       {
         id: "admin-config-set",
         label: "Set Global Config",
-        description: "Update active semester and calendar boundaries.",
+        description: "Update active semester, calendar boundaries, and institutional thresholds.",
         method: "POST",
         path: "/api/admin/config",
         body: {
           active_semester_type: "ODD",
           start_date: "2026-07-15",
           end_date: "2026-12-10",
+          max_aicte_points: 100,
+          min_attendance_percent: 75,
         },
       },
       {
@@ -174,6 +176,13 @@ export const roleBlueprints: RoleBlueprint[] = [
         method: "GET",
         path: "/api/admin/notices?audience=INSTITUTE",
       },
+      {
+        id: "admin-materials-list",
+        label: "Study Materials Registry",
+        description: "Oversee all study materials uploaded to MinIO object storage.",
+        method: "GET",
+        path: "/api/admin/materials",
+      },
     ],
   },
   {
@@ -238,7 +247,7 @@ export const roleBlueprints: RoleBlueprint[] = [
         label: "Track Student",
         description: "Open branch-level tracking dashboard for a UID.",
         method: "GET",
-        path: "/api/hod/students/2023-CSE-A-01-2027",
+        path: "/api/hod/students/STUDENT-COMP-001",
       },
       {
         id: "hod-alumni",
@@ -293,6 +302,13 @@ export const roleBlueprints: RoleBlueprint[] = [
         method: "GET",
         path: "/api/hod/subjects",
       },
+      {
+        id: "hod-materials",
+        label: "Study Material Oversight",
+        description: "Monitor notes and PDFs uploaded by faculty to MinIO.",
+        method: "GET",
+        path: "/api/hod/materials",
+      },
     ],
   },
   {
@@ -321,14 +337,14 @@ export const roleBlueprints: RoleBlueprint[] = [
         label: "Student Portfolio",
         description: "Open full PTM-ready profile for a UID.",
         method: "GET",
-        path: "/api/class-incharge/students/2023-CSE-A-01-2027/portfolio",
+        path: "/api/class-incharge/students/STUDENT-COMP-001/portfolio",
       },
       {
         id: "ci-ptm",
         label: "Generate PTM Report",
         description: "AI-assisted PTM summary generation.",
         method: "GET",
-        path: "/api/class-incharge/students/2023-CSE-A-01-2027/ptm-report",
+        path: "/api/class-incharge/students/STUDENT-COMP-001/ptm-report",
       },
       {
         id: "ci-notice",
@@ -354,6 +370,20 @@ export const roleBlueprints: RoleBlueprint[] = [
         description: "Fetch notices visible to the class cohort.",
         method: "GET",
         path: "/api/class-incharge/notices",
+      },
+      {
+        id: "ci-aicte-tracker",
+        label: "AICTE Activity Tracker",
+        description: "Monitor total AICTE points per student for graduation requirements.",
+        method: "GET",
+        path: "/api/class-incharge/aicte-tracker",
+      },
+      {
+        id: "ci-materials",
+        label: "Study Material Monitor",
+        description: "Review study resources uploaded for the class.",
+        method: "GET",
+        path: "/api/class-incharge/materials",
       },
     ],
   },
@@ -386,7 +416,7 @@ export const roleBlueprints: RoleBlueprint[] = [
         body: {
           slot_id: 1,
           date: "2026-05-05",
-          present_uids: ["2023-CSE-A-01-2027", "2023-CSE-A-02-2027"],
+          present_uids: ["STUDENT-COMP-001", "2023-CSE-A-02-2027"],
           absent_uids: ["2023-CSE-A-03-2027"],
         },
       },
@@ -397,7 +427,7 @@ export const roleBlueprints: RoleBlueprint[] = [
         method: "POST",
         path: "/api/subject-incharge/marks",
         body: {
-          student_uid: "2023-CSE-A-01-2027",
+          student_uid: "STUDENT-COMP-001",
           subject_id: 1,
           marks: 71,
         },
@@ -409,7 +439,7 @@ export const roleBlueprints: RoleBlueprint[] = [
         method: "POST",
         path: "/api/subject-incharge/marks/suppli",
         body: {
-          student_uid: "2023-CSE-A-01-2027",
+          student_uid: "STUDENT-COMP-001",
           subject_id: 1,
           marks: 63,
         },
@@ -516,7 +546,7 @@ export const roleBlueprints: RoleBlueprint[] = [
         path: "/api/practical-teacher/sessions/1/attendance",
         body: {
           attendance: [
-            { student_uid: "2023-CSE-A-01-2027", status: "Present" },
+            { student_uid: "STUDENT-COMP-001", status: "Present" },
             { student_uid: "2023-CSE-A-02-2027", status: "Absent" },
           ],
         },
@@ -528,7 +558,7 @@ export const roleBlueprints: RoleBlueprint[] = [
         method: "POST",
         path: "/api/practical-teacher/sessions/1/marks",
         body: {
-          student_uid: "2023-CSE-A-01-2027",
+          student_uid: "STUDENT-COMP-001",
           subject_id: 1,
           experiment_id: 1,
           viva_marks: 8,
@@ -545,7 +575,7 @@ export const roleBlueprints: RoleBlueprint[] = [
         method: "POST",
         path: "/api/practical-teacher/submissions",
         body: {
-          student_uid: "2023-CSE-A-01-2027",
+          student_uid: "STUDENT-COMP-001",
           experiment_id: 1,
           file_url: "https://storage.local/exp1.pdf",
           status: "Submitted",
@@ -618,6 +648,13 @@ export const roleBlueprints: RoleBlueprint[] = [
         method: "GET",
         path: "/api/practical-teacher/submissions/1",
       },
+      {
+        id: "pt-insights",
+        label: "AI Lab Insights",
+        description: "Gemini analysis of marks and attendance to flag weak students.",
+        method: "POST",
+        path: "/api/practical-teacher/insights",
+      },
     ],
   },
   {
@@ -639,8 +676,8 @@ export const roleBlueprints: RoleBlueprint[] = [
     ],
     actions: [
       { id: "tg-mentees", label: "List Mentees", description: "Get assigned mentee roster with backlog counts.", method: "GET", path: "/api/teacher-guardian/mentees" },
-      { id: "tg-portfolio", label: "Mentee Portfolio", description: "Open a student mentorship portfolio.", method: "GET", path: "/api/teacher-guardian/mentees/2023-CSE-A-01-2027" },
-      { id: "tg-report", label: "Improvement Report", description: "Generate AI-driven areas of improvement report.", method: "GET", path: "/api/teacher-guardian/mentees/2023-CSE-A-01-2027/improvement-report" },
+      { id: "tg-portfolio", label: "Mentee Portfolio", description: "Open a student mentorship portfolio.", method: "GET", path: "/api/teacher-guardian/mentees/STUDENT-COMP-001" },
+      { id: "tg-report", label: "Improvement Report", description: "Generate AI-driven areas of improvement report.", method: "GET", path: "/api/teacher-guardian/mentees/STUDENT-COMP-001/improvement-report" },
       {
         id: "tg-aicte-award",
         label: "Award AICTE Points",
@@ -648,7 +685,7 @@ export const roleBlueprints: RoleBlueprint[] = [
         method: "POST",
         path: "/api/teacher-guardian/aicte-points",
         body: {
-          student_uid: "2023-CSE-A-01-2027",
+          student_uid: "STUDENT-COMP-001",
           activity: "Hackathon finalist",
           points: 15,
         },
@@ -666,7 +703,7 @@ export const roleBlueprints: RoleBlueprint[] = [
         label: "View AICTE Points",
         description: "Fetch AICTE point history for a mentee UID.",
         method: "GET",
-        path: "/api/teacher-guardian/aicte-points/2023-CSE-A-01-2027",
+        path: "/api/teacher-guardian/aicte-points/STUDENT-COMP-001",
       },
       {
         id: "tg-notices",

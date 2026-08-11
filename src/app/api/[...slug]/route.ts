@@ -12,6 +12,7 @@ import * as teacherGuardianService from "@/services/teacherGuardian.service";
 import * as practicalTeacherService from "@/services/practicalTeacher.service";
 import * as geminiService from "@/services/gemini.service";
 import * as minioService from "@/services/minio.service";
+import * as materialsService from "@/services/materials.service";
 
 type JsonBody = Record<string, unknown>;
 type ProgressionYear = "1st" | "2nd" | "3rd" | "4th";
@@ -182,10 +183,16 @@ async function handleAdmin(request: NextRequest, slug: string[]) {
       if (!isSemesterType(semType) || !startDate || !endDate) {
         return jsonError("active_semester_type, start_date, and end_date are required.");
       }
+
+      const maxAictePoints = readNumber(body.max_aicte_points);
+      const minAttendancePercent = readNumber(body.min_attendance_percent);
+
       const configId = await adminService.setGlobalConfig(
         semType,
         startDate,
-        endDate
+        endDate,
+        Number.isFinite(maxAictePoints) && maxAictePoints > 0 ? maxAictePoints : 100,
+        Number.isFinite(minAttendancePercent) && minAttendancePercent > 0 ? minAttendancePercent : 75
       );
       return jsonSuccess({ config_id: configId }, { status: 201 }, "Global config set.");
     }
@@ -292,6 +299,10 @@ async function handleAdmin(request: NextRequest, slug: string[]) {
 
   if (tail[0] === "alumni" && request.method === "GET") {
     return jsonSuccess(await adminService.getAlumniRecords());
+  }
+
+  if (tail[0] === "materials" && request.method === "GET") {
+    return jsonSuccess(await materialsService.listAllMaterials());
   }
 
   if (tail[0] === "notices") {
@@ -406,6 +417,9 @@ async function handleHod(request: NextRequest, slug: string[]) {
   if (tail[0] === "subjects" && request.method === "GET") {
     return jsonSuccess(await hodService.getSubjectsList());
   }
+  if (tail[0] === "materials" && request.method === "GET") {
+    return jsonSuccess(await materialsService.listAllMaterials());
+  }
 
   return jsonError("Route not found.", 404);
 }
@@ -446,6 +460,12 @@ async function handleClassIncharge(request: NextRequest, slug: string[]) {
   }
   if (tail[0] === "progression-readiness" && request.method === "GET") {
     return jsonSuccess(await classInchargeService.getProgressionReadiness());
+  }
+  if (tail[0] === "aicte-tracker" && request.method === "GET") {
+    return jsonSuccess(await classInchargeService.getAICTETracker());
+  }
+  if (tail[0] === "materials" && request.method === "GET") {
+    return jsonSuccess(await materialsService.listAllMaterials());
   }
 
   return jsonError("Route not found.", 404);
@@ -520,8 +540,17 @@ async function handleSubjectIncharge(request: NextRequest, slug: string[]) {
   }
   if (tail[0] === "materials" && request.method === "POST") {
     const body = await readJsonBody(request);
+    const materialId = await materialsService.registerMaterial({
+      subjectId: readNumber(body.subject_id),
+      fileKey: readString(body.fileKey),
+      fileName: readString(body.fileName),
+      fileType: readString(body.fileType) || undefined,
+      bucketName: readString(body.bucketName) || "study-materials",
+      uploadedBy: Number(auth.user.id),
+    });
     return jsonSuccess(
       {
+        material_id: materialId,
         subject_id: readNumber(body.subject_id),
         object_name: readString(body.fileKey),
         file_name: readString(body.fileName),
@@ -619,6 +648,9 @@ async function handlePracticalTeacher(request: NextRequest, slug: string[]) {
       max_marks: number;
     });
     return jsonSuccess({ experiment_id: experimentId }, { status: 201 }, "Experiment created.");
+  }
+  if (tail[0] === "insights" && request.method === "POST") {
+    return jsonSuccess(await practicalTeacherService.generateLabInsights(facultyId));
   }
   if (tail[0] === "batches" && request.method === "GET" && tail[1]) {
     return jsonSuccess(await practicalTeacherService.getLabBatches(Number(tail[1])));
