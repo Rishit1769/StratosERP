@@ -517,6 +517,27 @@ export const roleBlueprints: RoleBlueprint[] = [
         method: "PUT",
         path: "/api/subject-incharge/grievances/1/resolve",
       },
+      {
+        id: "si-attendance-flags",
+        label: "Attendance Threshold Flags",
+        description: "Flag students below the institutional attendance threshold.",
+        method: "GET",
+        path: "/api/subject-incharge/attendance-flags",
+      },
+      {
+        id: "si-heatmap",
+        label: "Question Heatmap",
+        description: "Question-level performance heatmap for an exam.",
+        method: "GET",
+        path: "/api/subject-incharge/heatmap/2?exam=MID",
+      },
+      {
+        id: "si-enrolled",
+        label: "Enrolled Students",
+        description: "Fetch enrolled students for a subject (bulk attendance support).",
+        method: "GET",
+        path: "/api/subject-incharge/students/2",
+      },
     ],
   },
   {

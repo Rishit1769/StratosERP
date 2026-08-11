@@ -35,7 +35,7 @@ const seedUsers = {
       label: "HOD",
       name: "Computer HOD",
       emailId: "hodcomp@tcetmumbai.in",
-      designationRole: "Subject Incharge",
+      designationRole: "HOD",
       isHod: true,
     },
     {
@@ -57,6 +57,13 @@ const seedUsers = {
       name: "Computer Teacher Guardian",
       emailId: "teacherguardiancomp@tcetmumbai.in",
       designationRole: "TG",
+      isHod: false,
+    },
+    {
+      label: "PracticalTeacher",
+      name: "Computer Lab Instructor",
+      emailId: "practicalteachercomp@tcetmumbai.in",
+      designationRole: "Practical Teacher",
       isHod: false,
     },
   ],
@@ -343,6 +350,89 @@ async function seedDemoData(stats: SeedStats): Promise<void> {
         data: { facultyId: teacherGuardian.facultyId, studentUid: student.uid, semester: 5 },
       });
       stats.created.push("TG assignment teacherguardiancomp → STUDENT-COMP-001");
+    }
+  }
+
+  if (student && subjectIncharge) {
+    // Question-level exam marks so the performance heatmap has data
+    const questionMarks = [
+      { questionNo: 1, marks: 9 },
+      { questionNo: 2, marks: 10 },
+      { questionNo: 3, marks: 4 },
+      { questionNo: 4, marks: 6 },
+      { questionNo: 5, marks: 8 },
+    ];
+    let heatmapCreated = 0;
+    for (const q of questionMarks) {
+      const existing = await prisma.questionMark.findUnique({
+        where: {
+          studentUid_subjectId_examType_questionNo: {
+            studentUid: student.uid,
+            subjectId,
+            examType: "MID",
+            questionNo: q.questionNo,
+          },
+        },
+        select: { questionMarkId: true },
+      });
+      if (!existing) {
+        await prisma.questionMark.create({
+          data: {
+            studentUid: student.uid,
+            subjectId,
+            examType: "MID",
+            questionNo: q.questionNo,
+            maxMarks: 10,
+            marks: q.marks,
+          },
+        });
+        heatmapCreated++;
+      }
+    }
+    if (heatmapCreated > 0) {
+      stats.created.push(`${heatmapCreated} MID question marks for heatmap`);
+    }
+  }
+
+  const practicalTeacher = await prisma.faculty.findUnique({
+    where: { emailId: "practicalteachercomp@tcetmumbai.in" },
+    select: { facultyId: true },
+  });
+  if (practicalTeacher && subjectIncharge) {
+    // Second lab batch + session assigned to the Practical Teacher so the
+    // dedicated PT role has a workspace with data on login
+    const existingBatch = await prisma.labBatch.findFirst({
+      where: { subjectId, batchName: "A2" },
+      select: { batchId: true },
+    });
+    if (!existingBatch) {
+      await prisma.labBatch.create({
+        data: { subjectId, batchName: "A2", facultyId: practicalTeacher.facultyId },
+      });
+      stats.created.push("lab batch A2 (Practical Teacher)");
+    }
+    const ptBatch = existingBatch ?? (await prisma.labBatch.findFirst({
+      where: { subjectId, batchName: "A2" },
+      select: { batchId: true },
+    }));
+    if (ptBatch) {
+      const today = new Date();
+      const existingSession = await prisma.labSession.findFirst({
+        where: { subjectId, batchId: ptBatch.batchId, sessionDate: today },
+        select: { sessionId: true },
+      });
+      if (!existingSession) {
+        await prisma.labSession.create({
+          data: {
+            subjectId,
+            batchId: ptBatch.batchId,
+            sessionDate: today,
+            assignedFacultyId: practicalTeacher.facultyId,
+            status: "Pending",
+          },
+        });
+        stats.created.push("lab session today (Practical Teacher, Pending)");
+      }
     }
   }
 }

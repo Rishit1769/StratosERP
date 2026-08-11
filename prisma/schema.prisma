@@ -20,6 +20,7 @@ model Subject {
   labSessions    LabSession[]
   labMarks       LabMark[]
   materials      StudyMaterial[]
+  questionMarks  QuestionMark[]
 
   @@map("subject")
 }
@@ -81,6 +82,7 @@ model Student {
   labSubmissions  LabSubmission[]
   aictePoints     AictePoints[]
   tgAssignments   TgAssignment[]
+  questionMarks   QuestionMark[]
 
   @@map("student")
 }
@@ -328,4 +330,20 @@ model StudyMaterial {
   @@index([subjectId], map: "idx_material_subject")
   @@index([uploadedBy], map: "idx_material_uploader")
   @@map("study_material")
+}
+
+model QuestionMark {
+  questionMarkId Int      @id @default(autoincrement()) @map("question_mark_id")
+  studentUid     String   @map("student_uid") @db.VarChar(30)
+  subjectId      Int      @map("subject_id")
+  examType       String   @map("exam_type") @db.VarChar(10)
+  questionNo     Int      @map("question_no")
+  maxMarks       Int      @map("max_marks")
+  marks          Decimal  @db.Decimal(5, 2)
+  student        Student  @relation(fields: [studentUid], references: [uid], onDelete: Cascade)
+  subject        Subject  @relation(fields: [subjectId], references: [subjectId], onDelete: Cascade)
+
+  @@unique([studentUid, subjectId, examType, questionNo], map: "uq_question_mark")
+  @@index([subjectId, examType], map: "idx_qm_subject_exam")
+  @@map("question_mark")
 }

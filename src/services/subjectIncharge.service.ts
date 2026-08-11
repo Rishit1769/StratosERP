@@ -204,3 +204,163 @@ export async function getFacultySubjects(facultyId: number) {
     [facultyId]
   );
 }
+
+// ── 75% attendance threshold flagging ──────────────────────────────
+// Theory attendance is stored per slot as { present: [...], absent: [...] }
+// in lecture_log.additional_topics_taught. Aggregate it per student and
+// flag anyone below the institutional threshold (global_config).
+export async function getAttendanceFlags(facultyId: number) {
+  const config = await selectOne<{ min_attendance_percent: number | null }>(
+    db,
+    "SELECT min_attendance_percent FROM global_config ORDER BY config_id DESC LIMIT 1"
+  );
+  const threshold = config?.min_attendance_percent ?? 75;
+
+  const logs = await selectRows<{ additional_topics_taught: string | null; subject_name: string }>(
+    db,
+    `
+    SELECT ll.additional_topics_taught, sub.name AS subject_name
+    FROM lecture_log ll
+    JOIN timetable_slot ts ON ts.slot_id = ll.slot_id
+    JOIN subject sub ON sub.subject_id = ts.subject_id
+    WHERE ts.faculty_id = ?
+    ORDER BY ll.execution_date ASC
+    `,
+    [facultyId]
+  );
+
+  const perStudent = new Map<string, { present: number; absent: number; subjects: Set<string> }>();
+
+  for (const log of logs) {
+    if (!log.additional_topics_taught) continue;
+    try {
+      const data = JSON.parse(log.additional_topics_taught) as { present?: string[]; absent?: string[] };
+      const present = Array.isArray(data.present) ? data.present : [];
+      const absent = Array.isArray(data.absent) ? data.absent : [];
+      for (const uid of present) {
+        const entry = perStudent.get(uid) ?? { present: 0, absent: 0, subjects: new Set<string>() };
+        entry.present++;
+        if (log.subject_name) entry.subjects.add(log.subject_name);
+        perStudent.set(uid, entry);
+      }
+      for (const uid of absent) {
+        const entry = perStudent.get(uid) ?? { present: 0, absent: 0, subjects: new Set<string>() };
+        entry.absent++;
+        if (log.subject_name) entry.subjects.add(log.subject_name);
+        perStudent.set(uid, entry);
+      }
+    } catch {
+      // ignore malformed JSON payloads
+    }
+  }
+
+  const flags = [...perStudent.entries()].map(([studentUid, entry]) => {
+    const total = entry.present + entry.absent;
+    const percentage = total === 0 ? null : Math.round((entry.present / total) * 100);
+    return {
+      student_uid: studentUid,
+      present: entry.present,
+      absent: entry.absent,
+      total_sessions: total,
+      attendance_percent: percentage,
+      threshold: threshold,
+      flagged: percentage !== null && percentage < threshold,
+      subjects: [...entry.subjects],
+    };
+  });
+
+  return {
+    threshold,
+    total_logged_sessions: logs.length,
+    flags: flags.sort((a, b) => (a.attendance_percent ?? 0) - (b.attendance_percent ?? 0)),
+  };
+}
+
+// ── Question-level performance heatmap ─────────────────────────────
+export async function getQuestionHeatmap(subjectId: number, examType = "MID") {
+  const rows = await selectRows<Record<string, unknown>>(
+    db,
+    `
+    SELECT
+      qm.student_uid,
+      s.email_id,
+      qm.question_no,
+      qm.max_marks,
+      qm.marks
+    FROM question_mark qm
+    JOIN student s ON s.uid = qm.student_uid
+    WHERE qm.subject_id = ? AND qm.exam_type = ?
+    ORDER BY qm.question_no ASC, qm.student_uid ASC
+    `,
+    [subjectId, examType]
+  );
+
+  const byQuestion = new Map<number, { total: number; count: number; maxMarks: number }>();
+  const students = new Map<string, { email: string; marks: Record<number, number> }>();
+
+  for (const row of rows) {
+    const questionNo = Number(row.question_no);
+    const marks = Number(row.marks);
+    const maxMarks = Number(row.max_marks);
+    const uid = String(row.student_uid);
+
+    const q = byQuestion.get(questionNo) ?? { total: 0, count: 0, maxMarks };
+    q.total += marks;
+    q.count++;
+    byQuestion.set(questionNo, q);
+
+    const student = students.get(uid) ?? { email: String(row.email_id ?? ""), marks: {} };
+    student.marks[questionNo] = marks;
+    students.set(uid, student);
+  }
+
+  const questions = [...byQuestion.entries()]
+    .map(([questionNo, q]) => ({
+      question_no: questionNo,
+      max_marks: q.maxMarks,
+      avg_marks: q.count ? Number((q.total / q.count).toFixed(2)) : null,
+      percentage: q.maxMarks && q.count ? Number(((q.total / (q.maxMarks * q.count)) * 100).toFixed(1)) : null,
+    }))
+    .sort((a, b) => a.question_no - b.question_no);
+
+  const weakQuestions = questions
+    .filter((q) => q.percentage !== null && q.percentage < 50)
+    .map((q) => q.question_no);
+
+  return {
+    subject_id: subjectId,
+    exam_type: examType,
+    questions,
+    weak_questions: weakQuestions,
+    students: [...students.entries()].map(([uid, student]) => ({ student_uid: uid, email_id: student.email, marks: student.marks })),
+  };
+}
+
+// ── Enrolled students for a subject (Default-Present bulk toggle) ──
+export async function getEnrolledStudents(subjectId: number) {
+  return selectRows(
+    db,
+    `
+    SELECT s.uid, s.email_id
+    FROM student_subject_record ssr
+    JOIN student s ON s.uid = ssr.student_uid
+    WHERE ssr.subject_id = ?
+    ORDER BY s.uid ASC
+    `,
+    [subjectId]
+  );
+}
+
+export async function getSlotSubject(slotId: number) {
+  return selectOne<{ subject_id: number; subject_name: string }>(
+    db,
+    `
+    SELECT ts.subject_id, sub.name AS subject_name
+    FROM timetable_slot ts
+    JOIN subject sub ON sub.subject_id = ts.subject_id
+    WHERE ts.slot_id = ?
+    LIMIT 1
+    `,
+    [slotId]
+  );
+}

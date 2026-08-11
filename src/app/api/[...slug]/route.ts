@@ -568,6 +568,22 @@ async function handleSubjectIncharge(request: NextRequest, slug: string[]) {
     await subjectInchargeService.resolveGrievance(Number(tail[1]), Number(auth.user.id));
     return jsonSuccess(undefined, undefined, "Grievance resolved.");
   }
+  if (tail[0] === "attendance-flags" && request.method === "GET") {
+    return jsonSuccess(await subjectInchargeService.getAttendanceFlags(Number(auth.user.id)));
+  }
+  if (tail[0] === "heatmap" && tail[1] && request.method === "GET") {
+    const examType = String(request.nextUrl.searchParams.get("exam") || "MID");
+    return jsonSuccess(await subjectInchargeService.getQuestionHeatmap(Number(tail[1]), examType));
+  }
+  if (tail[0] === "students" && tail[1] && request.method === "GET") {
+    return jsonSuccess(await subjectInchargeService.getEnrolledStudents(Number(tail[1])));
+  }
+  if (tail[0] === "slot-subject" && request.method === "GET") {
+    const slotId = Number(request.nextUrl.searchParams.get("slot_id") || "");
+    if (!slotId) return jsonError("slot_id is required.");
+    const slot = await subjectInchargeService.getSlotSubject(slotId);
+    return slot ? jsonSuccess(slot) : jsonError("Slot not found.", 404);
+  }
   if (tail[0] === "syllabus-analysis" && request.method === "POST") {
     const body = await readJsonBody(request);
     return jsonSuccess(

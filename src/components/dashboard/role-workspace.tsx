@@ -226,6 +226,91 @@ function renderPayloadData(payload: unknown): ReactNode {
   return <span className="font-mono text-xs uppercase tracking-[0.16em] text-[var(--muted-foreground)]">Unsupported response type.</span>;
 }
 
+// Monochrome question-level heatmap (DESIGN.md: no decorative colour —
+// intensity is expressed through grayscale fill + border weight).
+type HeatmapQuestion = { question_no: number; max_marks: number; avg_marks: number | null; percentage: number | null };
+type HeatmapStudent = { student_uid: string; email_id: string; marks: Record<string, number> };
+
+function renderHeatmap(payload: unknown): ReactNode {
+  const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+  const data = root?.data && typeof root.data === "object" ? (root.data as Record<string, unknown>) : null;
+  if (!data) return renderPayloadData(payload);
+
+  const questions = Array.isArray(data.questions) ? (data.questions as HeatmapQuestion[]) : [];
+  const students = Array.isArray(data.students) ? (data.students as HeatmapStudent[]) : [];
+  const weak = new Set<number>(Array.isArray(data.weak_questions) ? (data.weak_questions as number[]) : []);
+
+  if (!questions.length || !students.length) return renderPayloadData(payload);
+
+  return (
+    <div className="space-y-3">
+      <p className="mono-kicker">
+        {String(data.exam_type ?? "MID")} heatmap — {students.length} student(s), {questions.length} question(s)
+        {weak.size > 0 ? ` · struggling questions: ${[...weak].sort((a, b) => a - b).join(", ")}` : " · no weak questions"}
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr>
+              <th className="border border-zinc-300 bg-zinc-100 px-2 py-1 text-left font-semibold">Student</th>
+              {questions.map((q) => (
+                <th key={q.question_no} className="border border-zinc-300 bg-zinc-100 px-2 py-1 text-center font-semibold">
+                  Q{q.question_no}
+                </th>
+              ))}
+              <th className="border border-zinc-300 bg-zinc-100 px-2 py-1 text-center font-semibold">Avg</th>
+            </tr>
+          </thead>
+          <tbody>
+            {students.map((student) => {
+              const values = questions.map((q) => student.marks[q.question_no]);
+              const presentValues = values.filter((v): v is number => v !== undefined);
+              const avg = presentValues.length
+                ? (presentValues.reduce((sum, v) => sum + v, 0) / presentValues.length).toFixed(1)
+                : "—";
+              return (
+                <tr key={student.student_uid}>
+                  <td className="border border-zinc-300 px-2 py-1 font-mono">{student.student_uid}</td>
+                  {questions.map((q) => {
+                    const value = student.marks[q.question_no];
+                    const ratio = value !== undefined && q.max_marks > 0 ? value / q.max_marks : 0;
+                    const fill = ratio >= 0.7 ? "var(--background)" : ratio >= 0.4 ? "var(--muted)" : "#dcdcdc";
+                    return (
+                      <td
+                        key={q.question_no}
+                        className="border border-zinc-300 px-2 py-1 text-center"
+                        style={{
+                          backgroundColor: fill,
+                          fontWeight: value !== undefined && ratio < 0.4 ? 700 : 400,
+                        }}
+                      >
+                        {value ?? "—"}
+                      </td>
+                    );
+                  })}
+                  <td className="border border-zinc-300 px-2 py-1 text-center font-semibold">{avg}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td className="border border-zinc-300 px-2 py-1 font-semibold">Class avg</td>
+              {questions.map((q) => (
+                <td key={q.question_no} className="border border-zinc-300 px-2 py-1 text-center">
+                  {q.avg_marks ?? "—"}
+                  <span className="block text-[10px] text-zinc-500">{q.percentage ?? 0}%</span>
+                </td>
+              ))}
+              <td className="border border-zinc-300 px-2 py-1" />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function escapeCsvCell(value: unknown): string {
   const stringValue = String(value ?? "");
   if (/[",\n]/.test(stringValue)) {
@@ -439,13 +524,13 @@ function buildSections(role: RoleBlueprint): SidebarSection[] {
         id: "subject-control",
         title: "Subject Control",
         detail: "Subject list, active slot and attendance capture",
-        actionIds: ["si-subjects", "si-slot", "si-attendance", "si-attendance-records"],
+        actionIds: ["si-subjects", "si-slot", "si-attendance", "si-attendance-records", "si-attendance-flags", "si-enrolled"],
       },
       {
         id: "evaluation",
         title: "Evaluation",
         detail: "Marks entry and performance analytics",
-        actionIds: ["si-marks", "si-suppli-marks", "si-subject-marks", "si-subject-analytics"],
+        actionIds: ["si-marks", "si-suppli-marks", "si-subject-marks", "si-subject-analytics", "si-heatmap"],
       },
       {
         id: "lecture-planning",
@@ -1109,6 +1194,73 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
     }
   }
 
+  async function applyDefaultPresent(): Promise<void> {
+    const fields = fieldValueMap["si-attendance"] || {};
+    const slotId = (fields.slot_id || "").trim();
+    if (!slotId) {
+      setActionState((prev) => ({
+        ...prev,
+        "si-attendance": { loading: false, error: "Enter a slot id in the attendance form first." },
+      }));
+      return;
+    }
+
+    try {
+      const slotResult = await sendJson(
+        `/api/subject-incharge/slot-subject?slot_id=${encodeURIComponent(slotId)}`,
+        "GET"
+      );
+      const slotData = slotResult.data && typeof slotResult.data === "object"
+        ? (slotResult.data as Record<string, unknown>).data as Record<string, unknown> | undefined
+        : undefined;
+      const subjectId = slotData?.subject_id;
+      if (!slotResult.ok || subjectId === undefined) {
+        setActionState((prev) => ({
+          ...prev,
+          "si-attendance": { loading: false, error: "Could not resolve the subject for this slot." },
+        }));
+        return;
+      }
+
+      const enrolledResult = await sendJson(`/api/subject-incharge/students/${Number(subjectId)}`, "GET");
+      const enrolledEnvelope =
+        enrolledResult.data && typeof enrolledResult.data === "object"
+          ? (enrolledResult.data as Record<string, unknown>)
+          : null;
+      const enrolled = Array.isArray(enrolledEnvelope?.data) ? (enrolledEnvelope.data as unknown[]) : [];
+      const rows = enrolled as Array<{ uid?: string; student_uid?: string }>;
+      if (!rows.length) {
+        setActionState((prev) => ({
+          ...prev,
+          "si-attendance": { loading: false, error: "No students are enrolled in this subject." },
+        }));
+        return;
+      }
+
+      const uids = rows.map((row) => String(row.uid ?? row.student_uid ?? "")).filter(Boolean);
+      setFieldValueMap((prev) => ({
+        ...prev,
+        "si-attendance": {
+          ...(prev["si-attendance"] || {}),
+          present_uids: uids.join(", "),
+          absent_uids: "",
+        },
+      }));
+      setActionState((prev) => ({
+        ...prev,
+        "si-attendance": { loading: false, ok: true, error: undefined },
+      }));
+    } catch (error) {
+      setActionState((prev) => ({
+        ...prev,
+        "si-attendance": {
+          loading: false,
+          error: error instanceof Error ? error.message : "Bulk assist failed.",
+        },
+      }));
+    }
+  }
+
   async function submitNotice(): Promise<void> {
     if (!token.trim()) {
       setNoticeFeedback("Please login first.");
@@ -1727,6 +1879,15 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                 ) : null}
 
                 <div className="mt-4 flex flex-wrap items-center gap-3">
+                  {action.id === "si-attendance" ? (
+                    <button
+                      type="button"
+                      onClick={() => void applyDefaultPresent()}
+                      className="rounded-none border border-zinc-900 px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-900 hover:text-white"
+                    >
+                      Default Present — fill enrolled
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void runAction(action)}
@@ -1756,7 +1917,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
                 {state?.payload !== undefined ? (
                   <div className="mt-3 rounded-none border border-zinc-200 bg-zinc-50 p-3">
                     <p className="text-xs font-medium uppercase tracking-[0.14em] text-zinc-500">Response</p>
-                    <div className="mt-2">{renderPayloadData(state.payload)}</div>
+                    <div className="mt-2">{action.id === "si-heatmap" ? renderHeatmap(state.payload) : renderPayloadData(state.payload)}</div>
                   </div>
                 ) : null}
               </article>
