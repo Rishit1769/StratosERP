@@ -144,16 +144,49 @@ export async function submitGrievance(data: {
   category: string;
   description: string;
   evidence?: string;
+  assignedAuthorityId?: number | null;
 }) {
   const result = await run(
     db,
     `
-    INSERT INTO grievance_ticket (student_uid, category, description, evidence, status)
-    VALUES (?, ?, ?, ?, 'Open')
+    INSERT INTO grievance_ticket (student_uid, category, description, evidence, status, assigned_authority_id)
+    VALUES (?, ?, ?, ?, 'Open', ?)
     `,
-    [data.student_uid, data.category, data.description, data.evidence || null]
+    [data.student_uid, data.category, data.description, data.evidence || null, data.assignedAuthorityId ?? null]
   );
   return result.insertId;
+}
+
+/**
+ * Resolves an AI-routed authority role to the faculty member who should own the
+ * ticket. Returns null for Admin (admin_user table — not a faculty row).
+ */
+export async function resolveAuthorityFacultyId(authority: string): Promise<number | null> {
+  const normalized = authority.trim().toLowerCase();
+
+  if (normalized === "hod") {
+    const hod = await selectOne<{ faculty_id: number }>(
+      db,
+      "SELECT faculty_id FROM faculty WHERE is_hod = 1 ORDER BY faculty_id ASC LIMIT 1"
+    );
+    return hod?.faculty_id ?? null;
+  }
+
+  const designationByRole: Record<string, string> = {
+    subjectincharge: "Subject Incharge",
+    classincharge: "Class Incharge",
+    tg: "TG",
+  };
+
+  const designation = designationByRole[normalized];
+  if (!designation) return null;
+
+  const faculty = await selectOne<{ faculty_id: number }>(
+    db,
+    "SELECT faculty_id FROM faculty WHERE designation_role = ? ORDER BY is_hod ASC, faculty_id ASC LIMIT 1",
+    [designation]
+  );
+  return faculty?.faculty_id ?? null;
 }
 
 export async function getMyGrievances(uid: string) {

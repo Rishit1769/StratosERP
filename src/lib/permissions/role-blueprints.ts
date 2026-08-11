@@ -509,6 +509,14 @@ export const roleBlueprints: RoleBlueprint[] = [
           lecture_logs_summary: "Covered Unit 1 fully and Unit 2 till sorting.",
         },
       },
+      { id: "si-grievances", label: "Assigned Grievances", description: "List open academic-marks grievances routed to you.", method: "GET", path: "/api/subject-incharge/grievances" },
+      {
+        id: "si-resolve-grievance",
+        label: "Resolve Grievance",
+        description: "Resolve a grievance assigned to you by ticket id.",
+        method: "PUT",
+        path: "/api/subject-incharge/grievances/1/resolve",
+      },
     ],
   },
   {
@@ -738,13 +746,14 @@ export const roleBlueprints: RoleBlueprint[] = [
       {
         id: "st-grievance-submit",
         label: "Submit Grievance",
-        description: "Create ticket and trigger AI routing.",
+        description: "Create ticket with optional evidence file and trigger AI routing.",
         method: "POST",
         path: "/api/student/grievances",
+        transport: "direct-upload",
+        uploadBucketName: "submissions",
         body: {
           category: "Interpersonal/peer conflict",
           description: "Repeated disruption during practical sessions.",
-          evidence: "https://example.com/evidence.png",
         },
       },
       { id: "st-grievances", label: "My Grievances", description: "List ticket history and statuses.", method: "GET", path: "/api/student/grievances" },

@@ -260,22 +260,28 @@ async function seedDemoData(stats: SeedStats): Promise<void> {
       stats.created.push(`enrollment STUDENT-COMP-001 → Data Structures`);
     }
 
-    // Timetable slot on Monday so attendance / active-slot / timetable flows work
-    const existingSlot = await prisma.timetableSlot.findFirst({
-      where: { subjectId, facultyId: subjectIncharge.facultyId },
-      select: { slotId: true },
-    });
-    if (!existingSlot) {
-      await prisma.timetableSlot.create({
-        data: {
-          dayOfWeek: "Monday",
-          startTime: new Date("1970-01-01T09:00:00Z"),
-          endTime: new Date("1970-01-01T10:00:00Z"),
-          subjectId,
-          facultyId: subjectIncharge.facultyId,
-        },
+    // Timetable slots Mon–Fri so active-slot / attendance / locator flows
+    // work on any weekday, not just one specific day
+    const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    for (const [index, day] of WEEKDAYS.entries()) {
+      const existingDaySlot = await prisma.timetableSlot.findFirst({
+        where: { subjectId, facultyId: subjectIncharge.facultyId, dayOfWeek: day },
+        select: { slotId: true },
       });
-      stats.created.push("timetable slot Monday 09:00–10:00 (Data Structures)");
+      if (!existingDaySlot) {
+        const startHour = String(9 + index).padStart(2, "0");
+        const endHour = String(10 + index).padStart(2, "0");
+        await prisma.timetableSlot.create({
+          data: {
+            dayOfWeek: day,
+            startTime: new Date(`1970-01-01T${startHour}:00:00Z`),
+            endTime: new Date(`1970-01-01T${endHour}:00:00Z`),
+            subjectId,
+            facultyId: subjectIncharge.facultyId,
+          },
+        });
+        stats.created.push(`timetable slot ${day} (Data Structures)`);
+      }
     }
 
     // Lab experiment + batch + session so Practical Teacher flows have data

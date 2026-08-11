@@ -561,6 +561,13 @@ async function handleSubjectIncharge(request: NextRequest, slug: string[]) {
       "Material upload registered."
     );
   }
+  if (tail[0] === "grievances" && request.method === "GET") {
+    return jsonSuccess(await subjectInchargeService.getAssignedGrievances(Number(auth.user.id)));
+  }
+  if (tail[0] === "grievances" && tail[2] === "resolve" && request.method === "PUT") {
+    await subjectInchargeService.resolveGrievance(Number(tail[1]), Number(auth.user.id));
+    return jsonSuccess(undefined, undefined, "Grievance resolved.");
+  }
   if (tail[0] === "syllabus-analysis" && request.method === "POST") {
     const body = await readJsonBody(request);
     return jsonSuccess(
@@ -746,14 +753,16 @@ async function handleStudent(request: NextRequest, slug: string[]) {
     const category = readString(body.category);
     const description = readString(body.description);
     const routing = await geminiService.routeGrievance(category, description);
+    const assignedAuthorityId = await studentService.resolveAuthorityFacultyId(routing.authority);
     const ticketId = await studentService.submitGrievance({
       student_uid: uid,
       category,
       description,
-      evidence: readOptionalString(body.evidence),
+      evidence: readOptionalString(body.evidence) || readOptionalString(body.fileKey),
+      assignedAuthorityId,
     });
     return jsonSuccess(
-      { ticket_id: ticketId, ai_routing: routing },
+      { ticket_id: ticketId, ai_routing: routing, assigned_authority_id: assignedAuthorityId },
       { status: 201 },
       "Grievance submitted."
     );

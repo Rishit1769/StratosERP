@@ -310,6 +310,8 @@ function convertRowsToPayload(actionId: string, rows: Array<Record<string, strin
       active_semester_type: row.active_semester_type || "ODD",
       start_date: row.start_date || "",
       end_date: row.end_date || "",
+      max_aicte_points: Number(row.max_aicte_points || 100),
+      min_attendance_percent: Number(row.min_attendance_percent || 75),
     };
   }
 
@@ -457,6 +459,12 @@ function buildSections(role: RoleBlueprint): SidebarSection[] {
         detail: "Upload classroom material for students",
         actionIds: ["si-upload-material"],
       },
+      {
+        id: "grievance-support",
+        title: "Grievance Support",
+        detail: "Resolve academic-marks grievances routed to you",
+        actionIds: ["si-grievances", "si-resolve-grievance"],
+      },
     ];
   }
 
@@ -574,7 +582,7 @@ function buildSections(role: RoleBlueprint): SidebarSection[] {
       id: "semester",
       title: "Semester Progression",
       detail: "Increase semester for eligible students",
-      actionIds: ["admin-config-get"],
+      actionIds: [],
     },
     {
       id: "exams",
@@ -629,6 +637,90 @@ function extractAnalyticsBars(payload: unknown): Array<{ name: string; value: nu
       value: Number(data[item.key] ?? 0),
     }))
     .filter((entry) => Number.isFinite(entry.value));
+}
+
+// ── Live KPI derivation ─────────────────────────────────────────────
+// The blueprint KPI values are presentational placeholders. Wire each
+// label to a real data source (a specific action's payload) so the hero
+// shows live numbers once that action has been executed. Unavailable
+// metrics render as "—" instead of fabricated stats.
+function deepFind(payload: unknown, path: Array<string | number>): unknown {
+  let current: unknown = payload;
+  for (const segment of path) {
+    if (segment === "length" && Array.isArray(current)) {
+      current = (current as unknown[]).length;
+      continue;
+    }
+    if (current && typeof current === "object") {
+      current = (current as Record<string, unknown>)[String(segment)];
+    } else {
+      return undefined;
+    }
+  }
+  return current;
+}
+
+const KPI_RULES: Record<string, Array<{ label: string; actionId: string; path: Array<string | number> }>> = {
+  admin: [
+    { label: "Active Semester", actionId: "admin-config-get", path: ["active_semester_type"] },
+    { label: "Students Progressed", actionId: "admin-progress", path: ["progressed"] },
+  ],
+  hod: [
+    { label: "Branch Avg Marks", actionId: "hod-analytics", path: ["summary", "avg_marks"] },
+    { label: "Escalated Tickets", actionId: "hod-escalated-grievances", path: ["length"] },
+    { label: "Faculty Assigned", actionId: "hod-faculty", path: ["length"] },
+  ],
+  "class-incharge": [
+    { label: "At-Risk Students", actionId: "ci-risk", path: ["length"] },
+    { label: "Readiness Score", actionId: "ci-progression-readiness", path: ["length"] },
+  ],
+  "subject-incharge": [
+    { label: "Subjects Owned", actionId: "si-subjects", path: ["length"] },
+    { label: "Syllabus Pace", actionId: "si-analysis", path: ["pacing_status"] },
+  ],
+  "practical-teacher": [
+    { label: "Sessions This Week", actionId: "pt-sessions", path: ["length"] },
+  ],
+  "teacher-guardian": [
+    { label: "Mentee Cohort", actionId: "tg-mentees", path: ["length"] },
+    { label: "Open Tickets", actionId: "tg-grievances", path: ["length"] },
+  ],
+  student: [
+    { label: "Backlog Subjects", actionId: "st-dashboard", path: ["progression_status", "kt_count"] },
+    { label: "AICTE Points", actionId: "st-dashboard", path: ["aicte_total_points"] },
+  ],
+};
+
+const ANALYTICS_ACTION_BY_ROLE: Record<string, string> = {
+  admin: "admin-analytics",
+  hod: "hod-analytics",
+  "class-incharge": "ci-analytics",
+  "subject-incharge": "si-subjects",
+  "practical-teacher": "pt-sessions",
+  "teacher-guardian": "tg-mentees",
+  student: "st-dashboard",
+};
+
+function resolveKpiValues(
+  roleSlug: string,
+  actionState: Record<string, ActionState>
+): Record<string, string> {
+  const rules = KPI_RULES[roleSlug] || [];
+  const values: Record<string, string> = {};
+
+  for (const rule of rules) {
+    const rawPayload = actionState[rule.actionId]?.payload;
+    // The proxy envelope wraps responses as { success, message, data }. Unwrap
+    // the inner data object/array before walking the path.
+    const payload =
+      rawPayload && typeof rawPayload === "object"
+        ? ((rawPayload as Record<string, unknown>).data as unknown) ?? rawPayload
+        : rawPayload;
+    const found = deepFind(payload, rule.path);
+    values[rule.label] = found === undefined || found === null || found === "" ? "—" : String(found);
+  }
+
+  return values;
 }
 
 export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
@@ -1142,6 +1234,22 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
     return extractAnalyticsBars(actionState["admin-analytics"]?.payload);
   }, [actionState]);
 
+  const kpiLiveValues = useMemo(() => {
+    return resolveKpiValues(role.slug, actionState);
+  }, [role.slug, actionState]);
+
+  // Auto-run the role's primary analytics action so hero KPIs show live
+  // data instead of placeholder values on first load.
+  useEffect(() => {
+    if (!token.trim()) return;
+    const analyticsActionId = ANALYTICS_ACTION_BY_ROLE[role.slug];
+    if (!analyticsActionId) return;
+    const analyticsAction = actionById[analyticsActionId];
+    if (!analyticsAction) return;
+    void runAction(analyticsAction);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, role.slug]);
+
   return (
     <div className="space-y-10">
       <section className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
@@ -1166,7 +1274,7 @@ export default function RoleWorkspace({ role }: { role: RoleBlueprint }) {
             {role.kpis.map((kpi) => (
               <article key={kpi.label} className="border-b border-white/30 pb-5 sm:border-b-0 sm:border-l sm:pl-5 sm:first:border-l-0 sm:first:pl-0">
                 <p className="font-mono text-xs uppercase tracking-[0.16em] text-white/70">{kpi.label}</p>
-                <p className="mono-title mt-4 text-4xl text-white">{kpi.value}</p>
+                <p className="mono-title mt-4 text-4xl text-white">{kpiLiveValues[kpi.label] ?? "—"}</p>
                 <p className="mt-2 text-sm leading-relaxed text-white/75">{kpi.hint}</p>
               </article>
             ))}

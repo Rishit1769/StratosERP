@@ -1,4 +1,4 @@
-import { db, selectOne, selectRows, withTransaction, type DbRow } from "@/lib/db";
+import { db, run, selectOne, selectRows, withTransaction, type DbRow } from "@/lib/db";
 
 export async function upsertMarks(studentUid: string, subjectId: number, marks: number) {
   await db.execute(
@@ -149,6 +149,42 @@ export async function getLectureLogs(subjectId: number) {
     `,
     [subjectId]
   );
+}
+
+export async function getAssignedGrievances(facultyId: number) {
+  return selectRows(
+    db,
+    `
+    SELECT
+      g.ticket_id,
+      g.student_uid,
+      g.category,
+      g.description,
+      g.evidence,
+      g.status,
+      g.assigned_authority_id,
+      g.created_at,
+      s.email_id AS student_email
+    FROM grievance_ticket g
+    JOIN student s ON s.uid = g.student_uid
+    WHERE g.assigned_authority_id = ? AND g.status = 'Open'
+    ORDER BY g.created_at DESC
+    `,
+    [facultyId]
+  );
+}
+
+export async function resolveGrievance(ticketId: number, facultyId: number) {
+  const ticket = await selectOne<{ assigned_authority_id: number | null }>(
+    db,
+    "SELECT assigned_authority_id FROM grievance_ticket WHERE ticket_id = ? LIMIT 1",
+    [ticketId]
+  );
+  if (!ticket) throw new Error("Grievance not found.");
+  if (ticket.assigned_authority_id !== facultyId) {
+    throw new Error("Not authorized for this grievance.");
+  }
+  await run(db, "UPDATE grievance_ticket SET status = 'Resolved' WHERE ticket_id = ?", [ticketId]);
 }
 
 export async function getFacultySubjects(facultyId: number) {
